@@ -4,20 +4,22 @@ import SwiftUI
 struct VerusApp: App {
     @State private var weight = WeightStore()
     @State private var activity = ActivityStore()
+    @State private var progress = ProgressStore()
 
     var body: some Scene {
         WindowGroup {
-            RootView(weight: weight, activity: activity)
+            RootView(weight: weight, activity: activity, progress: progress)
         }
     }
 }
 
-/// Three of the concept's five screens exist or are stubbed. Food, Activity
-/// and Progress arrive as their own tabs; the tab bar is here now so adding
-/// one is a case and not a restructure.
+/// Four of the concept's five screens. Food is the one still missing, and it
+/// is the one waiting on the photo-to-calorie spike — adding it is a `Tab`
+/// here and nothing else.
 struct RootView: View {
     @Bindable var weight: WeightStore
     @Bindable var activity: ActivityStore
+    @Bindable var progress: ProgressStore
 
     var body: some View {
         TabView {
@@ -29,6 +31,9 @@ struct RootView: View {
             }
             Tab("Weight", systemImage: "scalemass") {
                 WeightView(store: weight)
+            }
+            Tab("Progress", systemImage: "photo.on.rectangle.angled") {
+                ProgressTimelineView(progress: progress, weight: weight)
             }
         }
     }
