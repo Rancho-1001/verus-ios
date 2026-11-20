@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Verus</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>UILaunchScreen</key>
+	<dict/>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+
+	<!-- These strings are what the permission sheet actually shows the user.
+	     Section 9 of the concept calls the Health permission flow a risk and
+	     asks for plain language, so they say what is read and why, in one
+	     sentence each, with no marketing. -->
+	<key>NSHealthShareUsageDescription</key>
+	<string>Verus reads your steps, workouts, energy burned and weight from Apple Health so you do not have to type them in twice.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Verus saves the weight you enter back to Apple Health, so your other apps stay in step with it.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Verus uses the camera to photograph meals and progress photos.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Verus lets you choose meal and progress photos from your library.</string>
+</dict>
+</plist>

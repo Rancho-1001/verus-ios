@@ -1,0 +1,71 @@
+# The Xcode project is generated from this file, never edited by hand.
+#
+#     xcodegen generate
+#
+# Verus.xcodeproj is gitignored on purpose: project.pbxproj is a generated
+# artefact that conflicts on every branch that adds a file. This spec is the
+# source of truth, and it is readable in a diff.
+
+name: Verus
+
+options:
+  bundleIdPrefix: com.nyansapolabs
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+targets:
+  Verus:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      - path: Resources
+        buildPhase: resources
+        optional: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nyansapolabs.verus
+        PRODUCT_NAME: Verus
+        INFOPLIST_FILE: Sources/App/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Sources/App/Verus.entitlements
+        # No team set: the simulator needs none, and hard-coding one would
+        # break the build on any other machine. Set it in Xcode when you
+        # first run on a real device.
+        CODE_SIGN_STYLE: Automatic
+        TARGETED_DEVICE_FAMILY: "1" # iPhone only, per the v1 scope
+        ENABLE_PREVIEWS: YES
+
+  VerusTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: Verus
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nyansapolabs.verus.tests
+        GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  Verus:
+    build:
+      targets:
+        Verus: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      gatherCoverageData: true
+      targets:
+        - VerusTests

@@ -1,0 +1,158 @@
+import Foundation
+import Observation
+
+/// Weigh-ins, and everything the Weight screen derives from them.
+///
+/// Storage is a JSON file in Application Support. That is a deliberate choice
+/// for v1: one user, one device, no account, no server — so health data never
+/// leaves the phone and there is nothing to breach. When sync across devices
+/// becomes a requirement, this is the single type that has to change.
+@MainActor
+@Observable
+final class WeightStore {
+
+    private(set) var entries: [WeightEntry] = []
+
+    /// Target weight. 150 lb is the upper end of the concept's stated goal
+    /// range; it is a starting value, editable in the UI later.
+    var goalKilograms: Double = 150 / WeightEntry.poundsPerKilogram
+
+    var calendar: Calendar = {
+        var c = Calendar.current
+        c.firstWeekday = 2  // weeks run Monday–Sunday
+        return c
+    }()
+
+    private let fileURL: URL?
+
+    init(fileURL: URL? = WeightStore.defaultFileURL, seedWhenEmpty: Bool = true) {
+        self.fileURL = fileURL
+        load()
+        if entries.isEmpty && seedWhenEmpty {
+            entries = Self.sampleEntries()
+        }
+    }
+
+    // MARK: - Derived
+
+    var weeklyAverages: [WeeklyAverage] {
+        TrendEngine.weeklyAverages(from: entries, calendar: calendar)
+    }
+
+    var trend: [TrendPoint] {
+        TrendEngine.smoothedTrend(from: entries, calendar: calendar)
+    }
+
+    var rateKilogramsPerWeek: Double? {
+        TrendEngine.rateKilogramsPerWeek(trend: trend)
+    }
+
+    var projection: TrendEngine.Projection {
+        TrendEngine.projection(
+            trend: trend,
+            goalKilograms: goalKilograms,
+            asOf: .now,
+            calendar: calendar
+        )
+    }
+
+    /// The headline number: the smoothed trend, not this morning's reading.
+    var trendPounds: Double? { trend.last?.pounds }
+
+    var latestEntry: WeightEntry? { entries.max { $0.date < $1.date } }
+
+    var thisWeek: WeeklyAverage? { weeklyAverages.last }
+
+    // MARK: - Mutation
+
+    func record(pounds: Double, on date: Date = .now, bodyFatPercent: Double? = nil) {
+        entries.append(
+            WeightEntry.fromPounds(pounds, date: date, bodyFatPercent: bodyFatPercent)
+        )
+        entries.sort { $0.date < $1.date }
+        save()
+    }
+
+    func delete(_ entry: WeightEntry) {
+        entries.removeAll { $0.id == entry.id }
+        save()
+    }
+
+    // MARK: - Persistence
+
+    static var defaultFileURL: URL? {
+        try? FileManager.default
+            .url(for: .applicationSupportDirectory, in: .userDomainMask,
+                 appropriateFor: nil, create: true)
+            .appendingPathComponent("weight-entries.json")
+    }
+
+    private func load() {
+        guard let fileURL, let data = try? Data(contentsOf: fileURL) else { return }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        entries = (try? decoder.decode([StoredEntry].self, from: data))?
+            .map(\.entry)
+            .sorted { $0.date < $1.date } ?? []
+    }
+
+    private func save() {
+        guard let fileURL else { return }
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        guard let data = try? encoder.encode(entries.map(StoredEntry.init)) else { return }
+        try? data.write(to: fileURL, options: .atomic)
+    }
+
+    /// `WeightEntry` stays free of Codable so the storage format can change
+    /// without the domain type following it around.
+    private struct StoredEntry: Codable {
+        let id: UUID
+        let date: Date
+        let kilograms: Double
+        let bodyFatPercent: Double?
+
+        init(_ entry: WeightEntry) {
+            id = entry.id
+            date = entry.date
+            kilograms = entry.kilograms
+            bodyFatPercent = entry.bodyFatPercent
+        }
+
+        var entry: WeightEntry {
+            WeightEntry(id: id, date: date, kilograms: kilograms, bodyFatPercent: bodyFatPercent)
+        }
+    }
+
+    // MARK: - Sample data
+
+    /// Six weeks of plausible weigh-ins so the screen has something to show
+    /// before the first real morning. Noisy on purpose — a clean line would
+    /// make the smoothing look like it was doing nothing.
+    static func sampleEntries() -> [WeightEntry] {
+        var generator = SeededGenerator(seed: 20_261_120)
+        let cal = Calendar.current
+        return (0..<42).compactMap { dayOffset -> WeightEntry? in
+            // Skip the odd day, the way real logging actually goes.
+            guard Int.random(in: 0..<10, using: &generator) > 0 else { return nil }
+            let date = cal.date(byAdding: .day, value: -(41 - dayOffset), to: .now)!
+            let trend = 180.0 - Double(dayOffset) * 0.16
+            let noise = Double.random(in: -1.2...1.2, using: &generator)
+            return WeightEntry.fromPounds(trend + noise, date: date)
+        }
+    }
+
+    /// Deterministic noise: the sample data looks the same on every launch, so
+    /// a screenshot taken today matches one taken tomorrow.
+    private struct SeededGenerator: RandomNumberGenerator {
+        private var state: UInt64
+        init(seed: UInt64) { state = seed &* 6_364_136_223_846_793_005 &+ 1 }
+        mutating func next() -> UInt64 {
+            state ^= state << 13
+            state ^= state >> 7
+            state ^= state << 17
+            return state
+        }
+    }
+}
