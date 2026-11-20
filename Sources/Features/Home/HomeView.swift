@@ -25,6 +25,7 @@ struct HomeView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
+                    sourceBanner
                     today
                     calendarCard
                     monthSummary
@@ -35,6 +36,89 @@ struct HomeView: View {
             .navigationTitle("Verus")
             .task(id: grid.month) { await activity.load(grid: grid) }
         }
+    }
+
+    // MARK: - Where the numbers came from
+
+    /// Shown whenever the figures on screen are not the user's own.
+    ///
+    /// The rule this enforces: sample data is never silent. An empty calendar
+    /// would teach nothing about what the app does, so the screen fills in —
+    /// and then says plainly that it has, every time, until real data arrives.
+    @ViewBuilder
+    private var sourceBanner: some View {
+        switch activity.state {
+        case .live:
+            EmptyView()
+
+        case .needsPermission:
+            banner(
+                icon: "heart.text.square",
+                title: "Showing sample data",
+                detail: "Connect Apple Health and this becomes your own steps and energy.",
+                action: ("Connect", { Task { await activity.requestPermission(for: grid) } })
+            )
+
+        case .noDataFromHealth:
+            banner(
+                icon: "exclamationmark.triangle",
+                title: "Apple Health returned nothing",
+                // Deliberately not "you denied access" — HealthKit does not
+                // report denied reads, so claiming to know would be a guess.
+                detail: "Either there is no data for this month, or Verus was not granted access to read it. Settings › Health › Data Access shows which.",
+                action: ("Open Settings", openSettings)
+            )
+
+        case .unavailable:
+            banner(
+                icon: "heart.slash",
+                title: "Apple Health is unavailable here",
+                detail: "Showing sample data so the screen still means something.",
+                action: nil
+            )
+
+        case .failed(let message):
+            banner(
+                icon: "exclamationmark.triangle",
+                title: "Could not read Apple Health",
+                detail: message,
+                action: ("Try again", { Task { await activity.load(grid: grid) } })
+            )
+        }
+    }
+
+    private func banner(
+        icon: String,
+        title: String,
+        detail: String,
+        action: (label: String, run: () -> Void)?
+    ) -> some View {
+        HStack(alignment: .top, spacing: 11) {
+            Image(systemName: icon)
+                .font(.subheadline)
+                .foregroundStyle(.orange)
+                .padding(.top, 1)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.subheadline.weight(.semibold))
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let action {
+                    Button(action.label, action: action.run)
+                        .font(.caption.weight(.semibold))
+                        .padding(.top, 3)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(.orange.opacity(0.09), in: .rect(cornerRadius: 14))
+    }
+
+    private func openSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
     }
 
     // MARK: - Today

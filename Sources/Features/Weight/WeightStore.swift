@@ -24,13 +24,67 @@ final class WeightStore {
     }()
 
     private let fileURL: URL?
+    private let health: HealthKitService?
 
-    init(fileURL: URL? = WeightStore.defaultFileURL, seedWhenEmpty: Bool = true) {
+    /// Set when a write to Apple Health fails. The weigh-in is still saved
+    /// locally — Health is a mirror, not the record.
+    private(set) var healthWriteError: String?
+    /// How many weigh-ins the last sync pulled in from other apps.
+    private(set) var lastImportCount = 0
+
+    init(
+        fileURL: URL? = WeightStore.defaultFileURL,
+        health: HealthKitService? = HealthKitService.isAvailable ? HealthKitService() : nil,
+        seedWhenEmpty: Bool = true
+    ) {
         self.fileURL = fileURL
+        self.health = health
         load()
         if entries.isEmpty && seedWhenEmpty {
             entries = Self.sampleEntries()
         }
+    }
+
+    // MARK: - Apple Health
+
+    /// Pulls weigh-ins recorded elsewhere — a smart scale, the Health app
+    /// itself, another tracker — and merges them in.
+    ///
+    /// Verus writes its own entries back to Health, so a naive import would
+    /// read them straight back and double every morning. Entries are matched
+    /// on the day plus the weight to a tenth of a kilogram; anything that
+    /// close on the same day is the same weigh-in, whichever app recorded it.
+    @discardableResult
+    func syncFromHealth(since: Date? = nil) async -> Int {
+        guard let health else { return 0 }
+        let start = since
+            ?? calendar.date(byAdding: .month, value: -6, to: .now)
+            ?? .distantPast
+
+        guard let imported = try? await health.weightEntries(from: start, to: .now) else {
+            return 0
+        }
+
+        var known = Set(entries.map(fingerprint))
+        var added = 0
+        for entry in imported where !known.contains(fingerprint(entry)) {
+            known.insert(fingerprint(entry))
+            entries.append(entry)
+            added += 1
+        }
+
+        if added > 0 {
+            entries.sort { $0.date < $1.date }
+            save()
+        }
+        lastImportCount = added
+        return added
+    }
+
+    /// Same day, same weight to 100 g — the same weigh-in.
+    private func fingerprint(_ entry: WeightEntry) -> String {
+        let day = calendar.startOfDay(for: entry.date).timeIntervalSince1970
+        return "\(Int(day))|\((entry.kilograms * 10).rounded())"
     }
 
     // MARK: - Derived
@@ -66,11 +120,23 @@ final class WeightStore {
     // MARK: - Mutation
 
     func record(pounds: Double, on date: Date = .now, bodyFatPercent: Double? = nil) {
-        entries.append(
-            WeightEntry.fromPounds(pounds, date: date, bodyFatPercent: bodyFatPercent)
-        )
+        let entry = WeightEntry.fromPounds(pounds, date: date, bodyFatPercent: bodyFatPercent)
+        entries.append(entry)
         entries.sort { $0.date < $1.date }
         save()
+
+        // Health is a mirror. The weigh-in is already saved locally above, so
+        // a failure here loses nothing — it is reported and the morning still
+        // counts.
+        guard let health else { return }
+        healthWriteError = nil
+        Task { [weak self] in
+            do {
+                try await health.save(entry: entry)
+            } catch {
+                self?.healthWriteError = error.localizedDescription
+            }
+        }
     }
 
     func delete(_ entry: WeightEntry) {

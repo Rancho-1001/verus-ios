@@ -148,6 +148,16 @@ struct WeightView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("This morning")
                 .font(.headline)
+            // A failed write to Health is said out loud. The weigh-in is
+            // already saved locally, so this is not an error the user has to
+            // act on — but silently dropping it would mean their other apps
+            // quietly fall out of step with no sign that anything happened.
+            if let error = store.healthWriteError {
+                Label(error, systemImage: "heart.slash")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .padding(.bottom, 2)
+            }
             HStack(spacing: 12) {
                 TextField("0.0", text: $entryText)
                     .keyboardType(.decimalPad)

@@ -10,23 +10,52 @@ import Observation
 @Observable
 final class ActivityStore {
 
+    /// What the numbers on screen actually are.
+    ///
+    /// This exists because HealthKit will not say whether a read was denied,
+    /// so the app has to reason from what it has: did we ask, and did anything
+    /// arrive. Every state other than `.live` is shown to the user — sample
+    /// data is never presented as if it were theirs.
+    enum SourceState: Equatable, Sendable {
+        /// Real data from Apple Health.
+        case live
+        /// The permission sheet has not been shown yet.
+        case needsPermission
+        /// We asked, and Health returned nothing for the whole month. Either
+        /// the read was declined or there genuinely is no data; HealthKit does
+        /// not distinguish, so neither does this.
+        case noDataFromHealth
+        /// No HealthKit on this device at all.
+        case unavailable
+        /// A query failed outright.
+        case failed(String)
+
+        var isShowingSampleData: Bool { self != .live }
+    }
+
     private(set) var byDay: [Date: DailyActivity] = [:]
+    private(set) var state: SourceState = .needsPermission
     private(set) var isLoading = false
-    /// Set when a load fails. The screen shows the calendar regardless — a
-    /// month with no step data is still a usable month view.
-    private(set) var loadError: String?
 
     /// The concept's stated target: roughly 15,000 steps a day.
     var dailyStepGoal = 15_000
 
     var calendar: Calendar
-    private let source: ActivitySource
 
-    init(source: ActivitySource = SampleActivitySource(), calendar: Calendar = .current) {
+    private let health: HealthKitService?
+    private let sample: ActivitySource
+
+    init(
+        health: HealthKitService? = HealthKitService.isAvailable ? HealthKitService() : nil,
+        sample: ActivitySource = SampleActivitySource(),
+        calendar: Calendar = .current
+    ) {
         var c = calendar
         c.firstWeekday = 2  // Monday, matching WeightStore and TrendEngine
         self.calendar = c
-        self.source = source
+        self.health = health
+        self.sample = sample
+        if health == nil { state = .unavailable }
     }
 
     func activity(on day: Date) -> DailyActivity? {
@@ -34,6 +63,29 @@ final class ActivityStore {
     }
 
     var today: DailyActivity? { activity(on: .now) }
+
+    // MARK: - Permission
+
+    var canRequestPermission: Bool {
+        health != nil && state != .live
+    }
+
+    /// Shows the Health permission sheet, then reloads.
+    ///
+    /// Returning from this says the sheet was answered, not that anything was
+    /// granted — the reload is what finds out.
+    func requestPermission(for grid: MonthGrid) async {
+        guard let health else { return }
+        do {
+            try await health.requestAuthorization()
+        } catch {
+            state = .failed(error.localizedDescription)
+            return
+        }
+        await load(grid: grid)
+    }
+
+    // MARK: - Loading
 
     /// Loads every day the grid can show, padding days included — otherwise
     /// the first and last rows would be blank for no reason the user can see.
@@ -43,14 +95,39 @@ final class ActivityStore {
         else { return }
 
         isLoading = true
-        loadError = nil
         defer { isLoading = false }
 
-        do {
-            byDay = try await source.dailyActivity(from: first, to: last)
-        } catch {
-            loadError = error.localizedDescription
+        guard let health else {
+            await loadSample(from: first, to: last, state: .unavailable)
+            return
         }
+
+        guard health.hasRequestedAuthorization else {
+            await loadSample(from: first, to: last, state: .needsPermission)
+            return
+        }
+
+        do {
+            let live = try await health.dailyActivity(from: first, to: last)
+            if live.isEmpty {
+                // Asked, and nothing came back. Could be a declined read,
+                // could be a genuinely empty month. HealthKit will not say.
+                await loadSample(from: first, to: last, state: .noDataFromHealth)
+            } else {
+                byDay = live
+                state = .live
+            }
+        } catch {
+            await loadSample(from: first, to: last, state: .failed(error.localizedDescription))
+        }
+    }
+
+    /// Fills the screen with sample data and records *why*, so the view can
+    /// say so. A calendar with nothing in it teaches the user nothing about
+    /// what the app does; a calendar labelled "sample" teaches them both.
+    private func loadSample(from first: Date, to last: Date, state newState: SourceState) async {
+        byDay = (try? await sample.dailyActivity(from: first, to: last)) ?? [:]
+        state = newState
     }
 
     // MARK: - Month summary
