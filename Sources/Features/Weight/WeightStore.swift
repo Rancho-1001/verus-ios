@@ -13,9 +13,27 @@ final class WeightStore {
 
     private(set) var entries: [WeightEntry] = []
 
-    /// Target weight. 150 lb is the upper end of the concept's stated goal
-    /// range; it is a starting value, editable in the UI later.
-    var goalKilograms: Double = 150 / WeightEntry.poundsPerKilogram
+    /// Target weight. 150 lb is a starting value, not a claim about the user —
+    /// it is editable on the Goals sheet and persists from there.
+    var goalKilograms: Double = 150 / WeightEntry.poundsPerKilogram {
+        didSet { UserDefaults.standard.set(goalKilograms, forKey: Self.goalWeightKey) }
+    }
+
+    /// Target body fat, as a percentage. Optional as a goal: plenty of people
+    /// track weight and never own a body-fat scale, and the Weight screen must
+    /// make sense for them too.
+    var goalBodyFatPercent: Double? = nil {
+        didSet {
+            if let goalBodyFatPercent {
+                UserDefaults.standard.set(goalBodyFatPercent, forKey: Self.goalBodyFatKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: Self.goalBodyFatKey)
+            }
+        }
+    }
+
+    private static let goalWeightKey = "goal.weightKilograms"
+    private static let goalBodyFatKey = "goal.bodyFatPercent"
 
     var calendar: Calendar = {
         var c = Calendar.current
@@ -39,6 +57,18 @@ final class WeightStore {
     ) {
         self.fileURL = fileURL
         self.health = health
+
+        // Assigning a property inside its own class's initialiser does not
+        // fire `didSet`, so restoring a saved goal here does not write it
+        // straight back out again.
+        let defaults = UserDefaults.standard
+        if let saved = defaults.object(forKey: Self.goalWeightKey) as? Double, saved > 0 {
+            goalKilograms = saved
+        }
+        if let savedFat = defaults.object(forKey: Self.goalBodyFatKey) as? Double {
+            goalBodyFatPercent = savedFat
+        }
+
         load()
         if entries.isEmpty && seedWhenEmpty {
             entries = Self.sampleEntries()
@@ -114,6 +144,32 @@ final class WeightStore {
     var trendPounds: Double? { trend.last?.pounds }
 
     var latestEntry: WeightEntry? { entries.max { $0.date < $1.date } }
+
+    /// The most recent body-fat reading, from whenever it was taken.
+    ///
+    /// Not "today's", because body fat is measured far less often than weight
+    /// — a scale that reports it may be used weekly, or never. The latest
+    /// figure is the best estimate of current composition, and the UI says
+    /// when it was taken rather than implying it is fresh.
+    var latestBodyFatEntry: WeightEntry? {
+        entries.filter { $0.bodyFatPercent != nil }.max { $0.date < $1.date }
+    }
+
+    var latestBodyFatPercent: Double? { latestBodyFatEntry?.bodyFatPercent }
+
+    /// How the weight goal and the body-fat goal relate at the current
+    /// composition. `.noBodyFatRecorded` whenever either is missing.
+    var goalRelationship: BodyComposition.GoalRelationship {
+        guard let current = trend.last?.kilograms, let goalFat = goalBodyFatPercent else {
+            return .noBodyFatRecorded
+        }
+        return BodyComposition.relationship(
+            currentWeightKilograms: current,
+            currentBodyFatPercent: latestBodyFatPercent,
+            goalWeightKilograms: goalKilograms,
+            goalBodyFatPercent: goalFat
+        )
+    }
 
     var thisWeek: WeeklyAverage? { weeklyAverages.last }
 

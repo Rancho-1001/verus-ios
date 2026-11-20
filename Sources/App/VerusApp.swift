@@ -30,7 +30,7 @@ struct RootView: View {
                 ActivityView(activity: activity)
             }
             Tab("Weight", systemImage: "scalemass") {
-                WeightView(store: weight)
+                WeightView(store: weight, activity: activity)
             }
             Tab("Progress", systemImage: "photo.on.rectangle.angled") {
                 ProgressTimelineView(progress: progress, weight: weight)

@@ -42,8 +42,13 @@ final class ActivityStore {
     private(set) var state: SourceState = .needsPermission
     private(set) var isLoading = false
 
-    /// The concept's stated target: roughly 15,000 steps a day.
-    var dailyStepGoal = 15_000
+    /// Steps a day to aim at. 15,000 is the concept's stated target and the
+    /// starting value; it is editable on the Goals sheet and persists there.
+    var dailyStepGoal = 15_000 {
+        didSet { UserDefaults.standard.set(dailyStepGoal, forKey: Self.stepGoalKey) }
+    }
+
+    private static let stepGoalKey = "goal.dailySteps"
 
     var calendar: Calendar
 
@@ -60,6 +65,9 @@ final class ActivityStore {
         self.calendar = c
         self.health = health
         self.sample = sample
+        if let saved = UserDefaults.standard.object(forKey: Self.stepGoalKey) as? Int, saved > 0 {
+            dailyStepGoal = saved
+        }
         if health == nil { state = .unavailable }
     }
 

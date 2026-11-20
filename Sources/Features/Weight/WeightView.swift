@@ -9,7 +9,10 @@ import SwiftUI
 /// not the number that matters.
 struct WeightView: View {
     @Bindable var store: WeightStore
+    @Bindable var activity: ActivityStore
     @State private var entryText = ""
+    @State private var bodyFatText = ""
+    @State private var isEditingGoals = false
     @FocusState private var entryFocused: Bool
 
     var body: some View {
@@ -26,6 +29,14 @@ struct WeightView: View {
             .background(Color(.systemGroupedBackground))
             .navigationTitle("Weight")
             .scrollDismissesKeyboard(.interactively)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Goals", systemImage: "target") { isEditingGoals = true }
+                }
+            }
+            .sheet(isPresented: $isEditingGoals) {
+                GoalsSheet(weight: store, activity: activity)
+            }
         }
     }
 
@@ -62,6 +73,8 @@ struct WeightView: View {
             projectionLine
                 .font(.subheadline)
                 .padding(.top, 10)
+
+            compositionLine
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -100,6 +113,46 @@ struct WeightView: View {
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
+        }
+    }
+
+    /// Body fat and what it means for the two goals together.
+    ///
+    /// Silent when there is no body-fat reading, rather than showing an empty
+    /// row — this is a screen that has to work for someone whose scale only
+    /// reports weight.
+    @ViewBuilder
+    private var compositionLine: some View {
+        if let entry = store.latestBodyFatEntry, let percent = entry.bodyFatPercent {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(percent, format: .number.precision(.fractionLength(1)))% body fat · measured \(entry.date, format: .dateTime.day().month())")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                if let relationship = goalRelationshipText {
+                    Text(relationship)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(.top, 8)
+        }
+    }
+
+    /// The concept asks for the relationship between the weight goal and the
+    /// body-fat goal to be visible, not just a date on a chart.
+    private var goalRelationshipText: String? {
+        guard let goalFat = store.goalBodyFatPercent else { return nil }
+        let fat = goalFat.formatted(.number.precision(.fractionLength(0)))
+        switch store.goalRelationship {
+        case .noBodyFatRecorded:
+            return nil
+        case .converge(let at):
+            return "\(fat)% body fat lands at about \(at.formatted(.number.precision(.fractionLength(0)))) lb — the same place as your weight goal."
+        case .bodyFatReachedFirst(let at):
+            return "\(fat)% body fat arrives around \(at.formatted(.number.precision(.fractionLength(0)))) lb, before the scale goal."
+        case .weightReachedFirst(let at):
+            return "\(fat)% body fat needs about \(at.formatted(.number.precision(.fractionLength(0)))) lb — below your weight goal."
         }
     }
 
@@ -158,20 +211,33 @@ struct WeightView: View {
                     .foregroundStyle(.orange)
                     .padding(.bottom, 2)
             }
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
                 TextField("0.0", text: $entryText)
                     .keyboardType(.decimalPad)
                     .focused($entryFocused)
                     .font(.system(size: 28, weight: .medium, design: .rounded))
-                    .frame(maxWidth: 140)
+                    .frame(maxWidth: 118)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
                     .background(.background, in: .rect(cornerRadius: 12))
                 Text("lb").foregroundStyle(.secondary)
-                Spacer()
+
+                // Optional, and visibly so. A scale that reports body fat is
+                // not a given, and a required field here would make the
+                // morning weigh-in slower for everyone who has not got one.
+                TextField("—", text: $bodyFatText)
+                    .keyboardType(.decimalPad)
+                    .font(.system(size: 20, weight: .medium, design: .rounded))
+                    .frame(maxWidth: 62)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 13)
+                    .background(.background, in: .rect(cornerRadius: 12))
+                Text("%").foregroundStyle(.secondary)
+
+                Spacer(minLength: 0)
                 Button("Save", action: save)
                     .buttonStyle(.borderedProminent)
-                    .disabled(parsedEntry == nil)
+                    .disabled(parsedEntry == nil || parsedBodyFat == nil)
             }
         }
     }
@@ -184,11 +250,21 @@ struct WeightView: View {
         return value
     }
 
+    /// `.some(nil)` is an empty field, which is fine. `.none` is a number
+    /// outside anything a body-fat scale reports, which is a typo.
+    private var parsedBodyFat: Double?? {
+        let trimmed = bodyFatText.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty { return .some(nil) }
+        guard let value = Double(trimmed), (3...60).contains(value) else { return .none }
+        return .some(value)
+    }
+
     private func save() {
-        guard let value = parsedEntry else { return }
+        guard let value = parsedEntry, case .some(let fat) = parsedBodyFat else { return }
         withAnimation(.snappy) {
-            store.record(pounds: value)
+            store.record(pounds: value, bodyFatPercent: fat)
             entryText = ""
+            bodyFatText = ""
             entryFocused = false
         }
     }
@@ -228,5 +304,5 @@ struct WeightView: View {
 }
 
 #Preview {
-    WeightView(store: WeightStore(fileURL: nil))
+    WeightView(store: WeightStore(fileURL: nil, health: nil), activity: ActivityStore(health: nil))
 }
