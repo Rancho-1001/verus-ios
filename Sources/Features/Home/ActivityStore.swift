@@ -33,7 +33,12 @@ final class ActivityStore {
         var isShowingSampleData: Bool { self != .live }
     }
 
+    /// Accumulates rather than replaces. The Home screen loads a month at a
+    /// time and the Activity screen wants a quarter; merging means navigating
+    /// back through months builds up the history both of them read from,
+    /// instead of each view evicting the other's data.
     private(set) var byDay: [Date: DailyActivity] = [:]
+    private(set) var workouts: [Workout] = []
     private(set) var state: SourceState = .needsPermission
     private(set) var isLoading = false
 
@@ -93,7 +98,18 @@ final class ActivityStore {
         guard let first = grid.weeks.first?.days.first?.date,
               let last = grid.weeks.last?.days.last?.date
         else { return }
+        await load(from: first, to: last)
+    }
 
+    /// The trailing window the Activity screen reads, so week-over-week has
+    /// something to compare against on first launch.
+    func loadRecent(weeks: Int = 12) async {
+        let last = Date.now
+        guard let first = calendar.date(byAdding: .day, value: -(weeks * 7), to: last) else { return }
+        await load(from: first, to: last)
+    }
+
+    private func load(from first: Date, to last: Date) async {
         isLoading = true
         defer { isLoading = false }
 
@@ -114,7 +130,7 @@ final class ActivityStore {
                 // could be a genuinely empty month. HealthKit will not say.
                 await loadSample(from: first, to: last, state: .noDataFromHealth)
             } else {
-                byDay = live
+                merge(live, workouts: try? await health.workouts(from: first, to: last))
                 state = .live
             }
         } catch {
@@ -126,8 +142,46 @@ final class ActivityStore {
     /// say so. A calendar with nothing in it teaches the user nothing about
     /// what the app does; a calendar labelled "sample" teaches them both.
     private func loadSample(from first: Date, to last: Date, state newState: SourceState) async {
-        byDay = (try? await sample.dailyActivity(from: first, to: last)) ?? [:]
+        let days = (try? await sample.dailyActivity(from: first, to: last)) ?? [:]
+        let sessions = try? await sample.workouts(from: first, to: last)
+        // Live and sample data must never mix: a calendar half real and half
+        // invented would be labelled one or the other and wrong either way.
+        if state == .live { byDay = [:]; workouts = [] }
+        merge(days, workouts: sessions)
         state = newState
+    }
+
+    private func merge(_ days: [Date: DailyActivity], workouts sessions: [Workout]?) {
+        byDay.merge(days) { _, new in new }
+        guard let sessions else { return }
+        var seen = Set(workouts.map(\.start))
+        for session in sessions where !seen.contains(session.start) {
+            seen.insert(session.start)
+            workouts.append(session)
+        }
+        workouts.sort { $0.start < $1.start }
+    }
+
+    // MARK: - Rollups
+
+    var weeks: [ActivityWeek] {
+        ActivityRollup.weeks(from: byDay, goal: dailyStepGoal, calendar: calendar)
+    }
+
+    var currentStreak: Int {
+        ActivityRollup.currentStreak(from: byDay, goal: dailyStepGoal, asOf: .now, calendar: calendar)
+    }
+
+    var longestStreak: Int {
+        ActivityRollup.longestStreak(from: byDay, goal: dailyStepGoal, calendar: calendar)
+    }
+
+    var weekOverWeekChange: Double? {
+        ActivityRollup.weekOverWeekChange(weeks)
+    }
+
+    func workouts(onOrAfter date: Date) -> [Workout] {
+        workouts.filter { $0.start >= date }.sorted { $0.start > $1.start }
     }
 
     // MARK: - Month summary

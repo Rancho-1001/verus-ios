@@ -32,6 +32,15 @@ protocol ActivitySource: Sendable {
     /// Daily totals for every day in the range that has a reading, keyed by
     /// midnight of that day. Days with no data are simply absent.
     func dailyActivity(from start: Date, to end: Date) async throws -> [Date: DailyActivity]
+
+    /// Workouts in the range, newest last.
+    func workouts(from start: Date, to end: Date) async throws -> [Workout]
+}
+
+extension ActivitySource {
+    /// A source that knows about steps but not workouts is a legitimate
+    /// source, so this is a default rather than a requirement.
+    func workouts(from start: Date, to end: Date) async throws -> [Workout] { [] }
 }
 
 /// Deterministic stand-in until HealthKit is wired up.
@@ -75,6 +84,51 @@ struct SampleActivitySource: ActivitySource {
                 // baseline for everything that is not walking.
                 activeKilocalories: Double(steps) * 0.04 + Double.random(in: 40...220, using: &rng),
                 restingKilocalories: Double.random(in: 1_600...1_750, using: &rng)
+            )
+        }
+        return result
+    }
+}
+
+extension SampleActivitySource {
+
+    /// A plausible week's training, repeated: runs, strength, the odd walk.
+    /// Same seeding rule as the step data — a given day always produces the
+    /// same session, so screenshots do not drift.
+    func workouts(from start: Date, to end: Date) async throws -> [Workout] {
+        let kinds: [(String, String, Double, Double?)] = [
+            ("Run", "figure.run", 420, 5_200),
+            ("Strength", "dumbbell", 310, nil),
+            ("Walk", "figure.walk", 180, 3_100),
+            ("HIIT", "figure.highintensity.intervaltraining", 350, nil),
+            ("Cycle", "bicycle", 460, 14_800),
+        ]
+
+        var result: [Workout] = []
+        var day = calendar.startOfDay(for: start)
+        let last = min(calendar.startOfDay(for: end), calendar.startOfDay(for: .now))
+
+        while day <= last {
+            defer { day = calendar.date(byAdding: .day, value: 1, to: day) ?? last.addingTimeInterval(1) }
+
+            var rng = SeededGenerator(seed: UInt64(abs(day.timeIntervalSince1970.rounded())) &+ 77)
+            // Roughly four sessions a week.
+            guard Int.random(in: 0..<7, using: &rng) < 4 else { continue }
+
+            let (kind, symbol, kcal, metres) = kinds[Int.random(in: 0..<kinds.count, using: &rng)]
+            let startHour = Int.random(in: 6...19, using: &rng)
+            let minutes = Double(Int.random(in: 25...75, using: &rng))
+            guard let begin = calendar.date(byAdding: .hour, value: startHour, to: day) else { continue }
+
+            result.append(
+                Workout(
+                    start: begin,
+                    end: begin.addingTimeInterval(minutes * 60),
+                    kind: kind,
+                    symbol: symbol,
+                    activeKilocalories: kcal * (minutes / 45),
+                    distanceMeters: metres.map { $0 * (minutes / 45) }
+                )
             )
         }
         return result

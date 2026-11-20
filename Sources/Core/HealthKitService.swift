@@ -163,6 +163,96 @@ final class HealthKitService: @unchecked Sendable {
         }
     }
 
+    // MARK: - Workouts
+
+    /// Workouts in the range, newest last.
+    ///
+    /// These are the same records Strava and Apple Fitness read — a run
+    /// logged on the watch arrives here without the user entering anything,
+    /// which is the whole claim behind replacing that part of the stack.
+    func workouts(from start: Date, to end: Date) async throws -> [Workout] {
+        guard Self.isAvailable else { throw HealthKitError.unavailable }
+
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: .strictStartDate)
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: HKObjectType.workoutType(),
+                predicate: predicate,
+                limit: HKObjectQueryNoLimit,
+                sortDescriptors: [sort]
+            ) { _, samples, error in
+                if let error {
+                    continuation.resume(throwing: HealthKitError.queryFailed(error.localizedDescription))
+                    return
+                }
+                let workouts = (samples as? [HKWorkout] ?? []).map { workout in
+                    Workout(
+                        start: workout.startDate,
+                        end: workout.endDate,
+                        kind: Self.name(for: workout.workoutActivityType),
+                        symbol: Self.symbol(for: workout.workoutActivityType),
+                        activeKilocalories: workout
+                            .statistics(for: HKQuantityType(.activeEnergyBurned))?
+                            .sumQuantity()?
+                            .doubleValue(for: .kilocalorie()),
+                        distanceMeters: workout
+                            .statistics(for: HKQuantityType(.distanceWalkingRunning))?
+                            .sumQuantity()?
+                            .doubleValue(for: .meter())
+                    )
+                }
+                continuation.resume(returning: workouts)
+            }
+            store.execute(query)
+        }
+    }
+
+    /// A readable name for the handful of activity types this user actually
+    /// logs. Anything else falls back to "Workout" rather than to a raw
+    /// enum case — `HKWorkoutActivityType` has over eighty members and
+    /// most of them would never appear here.
+    static func name(for type: HKWorkoutActivityType) -> String {
+        switch type {
+        case .running: "Run"
+        case .walking: "Walk"
+        case .hiking: "Hike"
+        case .cycling: "Cycle"
+        case .swimming: "Swim"
+        case .traditionalStrengthTraining, .functionalStrengthTraining: "Strength"
+        case .highIntensityIntervalTraining: "HIIT"
+        case .yoga: "Yoga"
+        case .coreTraining: "Core"
+        case .elliptical: "Elliptical"
+        case .rowing: "Row"
+        case .stairClimbing, .stairs: "Stairs"
+        case .soccer: "Football"
+        case .basketball: "Basketball"
+        default: "Workout"
+        }
+    }
+
+    static func symbol(for type: HKWorkoutActivityType) -> String {
+        switch type {
+        case .running: "figure.run"
+        case .walking: "figure.walk"
+        case .hiking: "figure.hiking"
+        case .cycling: "bicycle"
+        case .swimming: "figure.pool.swim"
+        case .traditionalStrengthTraining, .functionalStrengthTraining: "dumbbell"
+        case .highIntensityIntervalTraining: "figure.highintensity.intervaltraining"
+        case .yoga: "figure.yoga"
+        case .coreTraining: "figure.core.training"
+        case .elliptical: "figure.elliptical"
+        case .rowing: "figure.rower"
+        case .stairClimbing, .stairs: "figure.stairs"
+        case .soccer: "figure.soccer"
+        case .basketball: "figure.basketball"
+        default: "figure.mixed.cardio"
+        }
+    }
+
     /// Writes a weigh-in back, so the rest of the phone stays in step.
     ///
     /// Write permission *is* honestly reported, so this one can refuse up

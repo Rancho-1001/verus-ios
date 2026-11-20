@@ -24,6 +24,9 @@ struct RootView: View {
             Tab("Home", systemImage: "square.grid.3x3") {
                 HomeView(weight: weight, activity: activity)
             }
+            Tab("Activity", systemImage: "figure.walk") {
+                ActivityView(activity: activity)
+            }
             Tab("Weight", systemImage: "scalemass") {
                 WeightView(store: weight)
             }
