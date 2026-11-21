@@ -76,17 +76,23 @@ struct MonthCalendarView: View {
         let isToday = calendar.isDateInToday(day.date)
         let isFuture = day.date > calendar.startOfDay(for: .now)
 
-        VStack(spacing: 1) {
-            Text(calendar.component(.day, from: day.date), format: .number)
-                .font(.system(size: 15, weight: isToday ? .bold : .medium, design: .rounded))
-                .foregroundStyle(dayNumberColor(isInMonth: day.isInMonth, isToday: isToday))
-
+        // Steps above the date, and the steps are the bold one. The date is
+        // the label; the step count is the thing being read. Putting the
+        // number you came for second was the wrong way round.
+        VStack(spacing: 0) {
             // A day with no reading shows nothing rather than "0" — the phone
             // being elsewhere is not the same as standing still. A day that
             // has not happened shows nothing either, whatever the source says.
-            Text(isFuture ? " " : (steps.map(Self.abbreviated) ?? " "))
-                .font(.system(size: 9, weight: .medium, design: .rounded))
-                .foregroundStyle(day.isInMonth ? .secondary : .quaternary)
+            Text(isFuture ? " " : (steps.map(Self.abbreviated) ?? "–"))
+                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .foregroundStyle(stepColor(steps: steps, inMonth: day.isInMonth, isFuture: isFuture))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+
+            Text(calendar.component(.day, from: day.date), format: .number)
+                .font(.system(size: 10, weight: isToday ? .semibold : .regular, design: .rounded))
+                .foregroundStyle(dayNumberColor(isInMonth: day.isInMonth, isToday: isToday))
                 .monospacedDigit()
         }
         .frame(height: 42)
@@ -103,6 +109,13 @@ struct MonthCalendarView: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel(day: day, steps: steps))
+    }
+
+    /// The step count carries the emphasis now, so it needs its own colour
+    /// rather than inheriting the muted one the date used to have.
+    private func stepColor(steps: Int?, inMonth: Bool, isFuture: Bool) -> Color {
+        guard inMonth, !isFuture else { return .primary.opacity(0.18) }
+        return steps == nil ? .primary.opacity(0.25) : .primary
     }
 
     private func dayNumberColor(isInMonth: Bool, isToday: Bool) -> Color {

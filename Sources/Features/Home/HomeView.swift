@@ -199,9 +199,26 @@ struct HomeView: View {
             HStack {
                 monthButton("chevron.left", label: "Previous month") { step(by: -1) }
                 Spacer()
-                Text(grid.month, format: .dateTime.month(.wide).year())
-                    .font(.headline)
-                    .contentTransition(.numericText())
+                // The title is the way in to the year. A sixth tab would push
+                // the tab bar into iOS's "More" menu, and the year belongs
+                // next to the month rather than beside Food and Weight.
+                NavigationLink {
+                    YearView(activity: activity, weight: weight) { month in
+                        monthAnchor = month
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(grid.month, format: .dateTime.month(.wide).year())
+                            .font(.headline)
+                            .contentTransition(.numericText())
+                        Image(systemName: "chevron.right")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Opens the year")
                 Spacer()
                 monthButton("chevron.right", label: "Next month", disabled: isShowingCurrentMonth) {
                     step(by: 1)

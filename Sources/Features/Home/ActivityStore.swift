@@ -109,6 +109,29 @@ final class ActivityStore {
         await load(from: first, to: last)
     }
 
+    /// A whole calendar year, for the year-in-review.
+    ///
+    /// One HealthKit statistics query per type covers the range, so this is
+    /// three round trips rather than 365 — but it is still the largest read
+    /// in the app, which is why it is called from the year view appearing and
+    /// not from app launch.
+    func loadYear(_ year: Int) async {
+        var start = DateComponents()
+        start.year = year
+        start.month = 1
+        start.day = 1
+        var end = DateComponents()
+        end.year = year
+        end.month = 12
+        end.day = 31
+        guard let first = calendar.date(from: start), let last = calendar.date(from: end) else { return }
+        await load(from: first, to: min(last, .now))
+    }
+
+    func yearSummary(_ year: Int) -> YearSummary {
+        ActivityRollup.yearSummary(from: byDay, goal: dailyStepGoal, year: year, calendar: calendar)
+    }
+
     /// The trailing window the Activity screen reads, so week-over-week has
     /// something to compare against on first launch.
     func loadRecent(weeks: Int = 12) async {
