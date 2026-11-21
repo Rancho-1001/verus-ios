@@ -82,12 +82,12 @@ struct GoalRelationshipTests {
         #expect(relationship == .noBodyFatRecorded)
     }
 
-    @Test("the concept's own case: 180 lb, aiming at 150 lb and under 10%")
+    @Test("the case the design was drawn around: 180 lb, aiming at 150 lb and under 10%")
     func theFoundersGoal() throws {
         // At 180 lb and 25% body fat, lean mass is 135 lb. Ten per cent body
         // fat then lands at 135 / 0.9 = 150 lb — the same number as the weight
-        // goal. That is the convergence the concept describes, and this test
-        // is what keeps the screen able to say so.
+        // goal. That convergence is the whole reason this type exists, and
+        // this test is what keeps the screen able to say so.
         let relationship = BodyComposition.relationship(
             currentWeightKilograms: kg(180),
             currentBodyFatPercent: 25,
