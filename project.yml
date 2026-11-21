@@ -38,9 +38,14 @@ targets:
         PRODUCT_NAME: Verus
         INFOPLIST_FILE: Sources/App/Info.plist
         CODE_SIGN_ENTITLEMENTS: Sources/App/Verus.entitlements
-        # No team set: the simulator needs none, and hard-coding one would
-        # break the build on any other machine. Set it in Xcode when you
-        # first run on a real device.
+        # The team comes from the environment, not from this file. Hard-coding
+        # one would break the build for anyone else; setting it by hand in
+        # Xcode would be wiped by the next `xcodegen generate`. Unset, it
+        # resolves to empty, which is exactly what a simulator build wants.
+        #
+        #     export VERUS_DEVELOPMENT_TEAM=XXXXXXXXXX
+        #     xcodegen generate
+        DEVELOPMENT_TEAM: ${VERUS_DEVELOPMENT_TEAM}
         CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1" # iPhone only, per the v1 scope
         ENABLE_PREVIEWS: YES

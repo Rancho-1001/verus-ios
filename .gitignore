@@ -5,7 +5,7 @@
 # Xcode
 DerivedData/
 build/
-.build/
+.build*/
 *.xcuserstate
 xcuserdata/
 .swiftpm/

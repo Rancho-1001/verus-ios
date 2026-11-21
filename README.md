@@ -48,9 +48,26 @@ xcodebuild test -scheme Verus \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 ```
 
-To run on a device, set your own team under **Signing & Capabilities** — the
-project deliberately hard-codes no team, so it builds for the simulator on any
-machine.
+### Running on a device
+
+The signing team is read from the environment rather than committed, because
+hard-coding one would break the build for everybody else and setting it by
+hand in Xcode would be wiped by the next `xcodegen generate`:
+
+```bash
+export VERUS_DEVELOPMENT_TEAM=XXXXXXXXXX   # your 10-character Apple team ID
+xcodegen generate
+```
+
+Find yours with:
+
+```bash
+security find-certificate -c "Apple Development" -p \
+  | openssl x509 -noout -subject | tr ',' '\n' | grep OU=
+```
+
+Unset, the variable resolves to empty, which is exactly what a simulator build
+wants — so a fresh clone builds and tests with no configuration at all.
 
 ---
 
