@@ -179,7 +179,12 @@ struct YearView: View {
     private var months: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Every day").font(.headline)
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+            // One month per row rather than two. Two fitted the year on
+            // fewer screens but left each day under 20 points wide, which
+            // cannot hold a readable number — and the step count is the
+            // thing being read. Full width gives about 46 points a day,
+            // enough for the count and the date beneath it.
+            LazyVStack(spacing: 10) {
                 ForEach(0..<12, id: \.self) { index in
                     Button {
                         if let date = calendar.date(from: DateComponents(year: year, month: index + 1, day: 1)) {
@@ -187,9 +192,11 @@ struct YearView: View {
                             dismiss()
                         }
                     } label: {
-                        MiniMonth(
+                        YearMonth(
                             year: year,
                             month: index + 1,
+                            daysWithData: summary.monthlyDaysWithData[index],
+                            totalSteps: summary.monthlySteps[index],
                             activity: activity,
                             calendar: calendar
                         )
@@ -241,14 +248,16 @@ struct YearView: View {
     }
 }
 
-// MARK: - Mini month
+// MARK: - One month in the year
 
-/// One month as a block of day squares, tinted by how close each came to the
-/// goal. Small enough that twelve fit on a phone, and dense enough that a
-/// strong stretch is visible as a shape rather than as a number.
-private struct MiniMonth: View {
+/// A month at full width: every day a tinted cell carrying its step count,
+/// with the date beneath — the same reading order as the Home calendar, just
+/// denser.
+private struct YearMonth: View {
     let year: Int
     let month: Int
+    let daysWithData: Int
+    let totalSteps: Int
     let activity: ActivityStore
     let calendar: Calendar
 
@@ -257,40 +266,74 @@ private struct MiniMonth: View {
             .map { MonthGrid.make(containing: $0, calendar: calendar) }
     }
 
+    private var averageSteps: Int? {
+        daysWithData > 0 ? totalSteps / daysWithData : nil
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(calendar.shortMonthSymbols[month - 1])
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(calendar.monthSymbols[month - 1])
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                if let averageSteps {
+                    Text("\(HomeView.grouped(averageSteps))/day")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                } else {
+                    Text("no data")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            }
 
             if let grid {
-                VStack(spacing: 2) {
+                VStack(spacing: 3) {
                     ForEach(grid.weeks) { week in
-                        HStack(spacing: 2) {
+                        HStack(spacing: 3) {
                             ForEach(week.days) { day in
-                                RoundedRectangle(cornerRadius: 2)
-                                    .fill(fill(day))
-                                    .aspectRatio(1, contentMode: .fit)
+                                cell(day)
                             }
                         }
                     }
                 }
             }
         }
-        .padding(10)
+        .padding(11)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.background, in: .rect(cornerRadius: 12))
+        .background(.background, in: .rect(cornerRadius: 14))
     }
 
-    private func fill(_ day: MonthGrid.Day) -> Color {
-        guard day.isInMonth else { return .clear }
-        guard day.date <= calendar.startOfDay(for: .now) else { return .primary.opacity(0.04) }
-        guard let steps = activity.activity(on: day.date)?.steps else {
-            // A day with no reading is drawn, but drawn as absent — distinct
-            // from both a quiet day and a day outside the month.
-            return .primary.opacity(0.07)
+    @ViewBuilder
+    private func cell(_ day: MonthGrid.Day) -> some View {
+        let steps = activity.activity(on: day.date)?.steps
+        let isFuture = day.date > calendar.startOfDay(for: .now)
+        let shown = day.isInMonth && !isFuture
+
+        VStack(spacing: 0) {
+            Text(shown ? (steps.map(MonthCalendarView.abbreviated) ?? "–") : " ")
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .foregroundStyle(steps == nil ? Color.primary.opacity(0.3) : .primary)
+            Text(day.isInMonth ? "\(calendar.component(.day, from: day.date))" : " ")
+                .font(.system(size: 7))
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
         }
+        .frame(maxWidth: .infinity)
+        .frame(height: 30)
+        .background {
+            RoundedRectangle(cornerRadius: 5).fill(fill(steps: steps, shown: shown))
+        }
+    }
+
+    private func fill(steps: Int?, shown: Bool) -> Color {
+        guard shown else { return .clear }
+        guard let steps else { return .primary.opacity(0.05) }
         let share = min(Double(steps) / Double(activity.dailyStepGoal), 1.0)
-        return Color.accentColor.opacity(0.14 + share * 0.72)
+        return Color.accentColor.opacity(0.10 + share * 0.34)
     }
 }
