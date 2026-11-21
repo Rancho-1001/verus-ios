@@ -15,6 +15,10 @@ struct MonthCalendarView: View {
     let grid: MonthGrid
     let activity: ActivityStore
     let weeklyAverages: [Date: WeeklyAverage]
+    /// Called when a day that has already happened is tapped. The grid shows
+    /// an abbreviated step count — "8.4k" — because that is what fits inside
+    /// a date cell; the exact figure lives behind this.
+    var onSelect: (Date) -> Void = { _ in }
 
     private var calendar: Calendar { activity.calendar }
 
@@ -45,8 +49,17 @@ struct MonthCalendarView: View {
     private func weekRow(_ week: MonthGrid.Week) -> some View {
         HStack(spacing: 4) {
             ForEach(week.days) { day in
-                dayCell(day)
-                    .frame(maxWidth: .infinity)
+                let isFuture = day.date > calendar.startOfDay(for: .now)
+                Button {
+                    onSelect(day.date)
+                } label: {
+                    dayCell(day)
+                }
+                .buttonStyle(.plain)
+                // A future day or one from a neighbouring month has nothing
+                // to show, so it is not offered as something to tap.
+                .disabled(isFuture || !day.isInMonth)
+                .frame(maxWidth: .infinity)
             }
             weekWeight(week)
                 .frame(width: gutterWidth)

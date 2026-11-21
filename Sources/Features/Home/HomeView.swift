@@ -8,8 +8,10 @@ import SwiftUI
 struct HomeView: View {
     @Bindable var weight: WeightStore
     @Bindable var activity: ActivityStore
+    @Bindable var food: FoodStore
 
     @State private var monthAnchor: Date = .now
+    @State private var selectedDay: Date?
 
     private var calendar: Calendar { activity.calendar }
 
@@ -35,6 +37,9 @@ struct HomeView: View {
             .background(Color(.systemGroupedBackground))
             .navigationTitle("Verus")
             .task(id: grid.month) { await activity.load(grid: grid) }
+            .sheet(item: $selectedDay) { day in
+                DayDetailSheet(day: day, activity: activity, weight: weight, food: food)
+            }
         }
     }
 
@@ -192,34 +197,53 @@ struct HomeView: View {
     private var calendarCard: some View {
         VStack(spacing: 14) {
             HStack {
-                Button { step(by: -1) } label: {
-                    Image(systemName: "chevron.left").font(.subheadline.weight(.semibold))
-                }
-                .accessibilityLabel("Previous month")
-
+                monthButton("chevron.left", label: "Previous month") { step(by: -1) }
                 Spacer()
                 Text(grid.month, format: .dateTime.month(.wide).year())
                     .font(.headline)
                     .contentTransition(.numericText())
                 Spacer()
-
-                Button { step(by: 1) } label: {
-                    Image(systemName: "chevron.right").font(.subheadline.weight(.semibold))
+                monthButton("chevron.right", label: "Next month", disabled: isShowingCurrentMonth) {
+                    step(by: 1)
                 }
-                .accessibilityLabel("Next month")
-                .disabled(isShowingCurrentMonth)
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(Color.accentColor)
 
             MonthCalendarView(
                 grid: grid,
                 activity: activity,
-                weeklyAverages: weeklyAverages
+                weeklyAverages: weeklyAverages,
+                onSelect: { selectedDay = $0 }
             )
         }
         .padding(16)
         .background(.background, in: .rect(cornerRadius: 18))
+    }
+
+    /// A month arrow with a thumb-sized hit area.
+    ///
+    /// The first version was a bare `Image` in a `.plain` button, which makes
+    /// the tappable region the glyph itself — around 12 points square against
+    /// Apple's 44-point minimum. A mouse in the simulator hits that every
+    /// time and a thumb essentially never does, which is why it survived
+    /// until the app ran on a real phone.
+    private func monthButton(
+        _ symbol: String,
+        label: String,
+        disabled: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.subheadline.weight(.semibold))
+                .frame(width: 44, height: 44)
+                // Without this the frame is decoration and only the glyph
+                // takes the tap.
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(disabled ? Color.secondary : Color.accentColor)
+        .disabled(disabled)
+        .accessibilityLabel(label)
     }
 
     private var isShowingCurrentMonth: Bool {
@@ -283,9 +307,15 @@ struct HomeView: View {
     }
 }
 
+/// `sheet(item:)` needs an Identifiable, and a bare `Date` is not one.
+extension Date: @retroactive Identifiable {
+    public var id: TimeInterval { timeIntervalSince1970 }
+}
+
 #Preview {
     HomeView(
-        weight: WeightStore(fileURL: nil),
-        activity: ActivityStore()
+        weight: WeightStore(fileURL: nil, health: nil),
+        activity: ActivityStore(health: nil),
+        food: FoodStore(fileURL: nil)
     )
 }

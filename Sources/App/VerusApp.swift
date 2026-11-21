@@ -26,7 +26,7 @@ struct RootView: View {
     var body: some View {
         TabView {
             Tab("Home", systemImage: "square.grid.3x3") {
-                HomeView(weight: weight, activity: activity)
+                HomeView(weight: weight, activity: activity, food: food)
             }
             Tab("Activity", systemImage: "figure.walk") {
                 ActivityView(activity: activity)
