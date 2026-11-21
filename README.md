@@ -4,9 +4,9 @@ An iOS app that puts activity, workouts, weight, body composition and progress
 on one timeline, fed from Apple Health wherever the phone already knows the
 answer.
 
-**Status: in development.** Four of five screens are built. Food — photo-first
-calorie logging — is not, and is waiting on a technical spike described at the
-bottom of this file.
+**Status: in development.** All five screens are built. Food logs manually
+and shows intake against expenditure; the photo-to-calorie path is gated on a
+technical spike described at the bottom of this file.
 
 | | |
 |---|---|
@@ -97,6 +97,12 @@ locked; the default is weaker and the default is not good enough for
 photographs somebody took of their own body. Deleting removes the file, not
 just the row pointing at it.
 
+**An unlogged day is not a deficit.** A day where Health reports 2,000
+calories burned and nothing was eaten into the app is an unlogged day, not a
+2,000 calorie deficit — and treating it as one would flatter the user and
+poison every average built on top of it. `EnergyBudget.Balance` has a separate
+`burnOnly` case for exactly this, and `averageNet` leaves those days out.
+
 **A day in progress does not break a streak.** At nine in the morning nobody
 has walked 15,000 steps, and an app that zeroes a three-week streak every
 midnight teaches you to stop opening it. Today counts once it qualifies;
@@ -123,15 +129,17 @@ number moves.
 | Activity | Am I moving as much as I think I am, week over week? | ✅ |
 | Weight | Weigh in daily; trust the weekly average | ✅ |
 | Progress | Photos and measurements on the weight timeline | ✅ |
-| Food | Log a meal from a photo in seconds | ❌ |
+| Food | Intake against expenditure, in one place | ◐ |
+
+◐ Food logs manually and shows the budget. Photo logging is not built.
 
 ---
 
 ## Testing
 
-**67 tests**, covering the parts where being wrong is silent: the trend
+**85 tests**, covering the parts where being wrong is silent: the trend
 maths, month-grid date arithmetic, activity rollups and streaks, the progress
-timeline's deltas, and body-composition arithmetic.
+timeline's deltas, body-composition arithmetic, and the energy budget.
 
 ```bash
 xcodebuild test -scheme Verus -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
@@ -179,11 +187,13 @@ is previewable on a machine with no Health permissions.
 
 Stated plainly, because a README that only lists what works is a sales page.
 
-- **Food is not built.** It is gated on a spike: photograph real meals, weigh
-  them, run them through a vision model, compare estimate to truth. If
-  estimates are too far off on real food to be useful with correction, the
-  product changes shape — better to learn that from a kitchen scale than after
-  building a sixth screen.
+- **Photo food logging is not built.** It is gated on a spike: photograph
+  real meals, weigh them, run them through a vision model, compare estimate to
+  truth. If estimates are too far off on real food to be useful with
+  correction, the product changes shape. The Food screen says this on its own
+  empty state rather than hiding the gap, and the `FoodEntry.Source` enum
+  already carries a `photoEstimate` case so the storage format will not have
+  to change when it lands.
 - **The weight write to HealthKit is unverified.** The read path and the
   permission flow are confirmed on the simulator; proving a write lands needs a
   real device.
