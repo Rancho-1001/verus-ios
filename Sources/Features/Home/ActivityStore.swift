@@ -144,6 +144,19 @@ final class ActivityStore {
         await load(from: first, to: min(last, .now))
     }
 
+    /// The first year Apple Health has anything for, once asked. `nil`
+    /// until the answer arrives, and the year view simply does not clamp
+    /// until then rather than guessing a floor.
+    private(set) var earliestDataYear: Int?
+
+    /// Asked once, from the year view. A single query against the oldest
+    /// step sample there is.
+    func loadEarliestDate() async {
+        guard earliestDataYear == nil, let health else { return }
+        guard let date = try? await health.earliestActivityDate() else { return }
+        earliestDataYear = calendar.component(.year, from: date)
+    }
+
     func yearSummary(_ year: Int) -> YearSummary {
         ActivityRollup.yearSummary(from: byDay, goal: dailyStepGoal, year: year, calendar: calendar)
     }

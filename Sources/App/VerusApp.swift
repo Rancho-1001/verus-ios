@@ -23,6 +23,9 @@ struct RootView: View {
     @Bindable var progress: ProgressStore
     @Bindable var food: FoodStore
 
+    /// Read here and nowhere else, so one setting decides the whole app.
+    @AppStorage(Appearance.storageKey) private var appearance: Appearance = .system
+
     var body: some View {
         TabView {
             Tab("Home", systemImage: "square.grid.3x3") {
@@ -41,5 +44,6 @@ struct RootView: View {
                 ProgressTimelineView(progress: progress, weight: weight)
             }
         }
+        .preferredColorScheme(appearance.colorScheme)
     }
 }

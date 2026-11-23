@@ -35,6 +35,14 @@ struct YearView: View {
         year == calendar.component(.year, from: .now)
     }
 
+    /// There is nothing before the first year Health has data for, and
+    /// paging back into empty years to be told so three times is not
+    /// browsing — it is the app wasting the user's thumb.
+    private var isEarliestYear: Bool {
+        guard let earliest = activity.earliestDataYear else { return false }
+        return year <= earliest
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
@@ -56,13 +64,16 @@ struct YearView: View {
         // the same four digits again, two rows up.
         .navigationBarTitleDisplayMode(.inline)
         .task(id: year) { await activity.loadYear(year) }
+        .task { await activity.loadEarliestDate() }
     }
 
     // MARK: - Header
 
     private var header: some View {
         HStack {
-            yearButton("chevron.left", label: "Previous year") { year -= 1 }
+            yearButton("chevron.left", label: "Previous year", disabled: isEarliestYear) {
+                year -= 1
+            }
             Spacer()
             VStack(spacing: 1) {
                 Text(String(year))
@@ -125,7 +136,7 @@ struct YearView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 13)
-        .background(.background, in: .rect(cornerRadius: 14))
+        .background(Color.card, in: .rect(cornerRadius: 14))
     }
 
     // MARK: - Highlights
@@ -154,7 +165,7 @@ struct YearView: View {
                 )
             }
         }
-        .background(.background, in: .rect(cornerRadius: 16))
+        .background(Color.card, in: .rect(cornerRadius: 16))
     }
 
     private func highlight(_ title: String, detail: String, value: String, symbol: String) -> some View {
@@ -191,7 +202,10 @@ struct YearView: View {
             // thing being read. Full width gives about 46 points a day,
             // enough for the count and the date beneath it.
             LazyVStack(spacing: 10) {
-                ForEach(0..<12, id: \.self) { index in
+                // Only the months that have something in them. December
+                // drawn empty in November is not information — it is a
+                // calendar reminding you that the year has twelve months.
+                ForEach(monthsWithData, id: \.self) { index in
                     Button {
                         if let date = calendar.date(from: DateComponents(year: year, month: index + 1, day: 1)) {
                             onSelectMonth(date)
@@ -208,10 +222,13 @@ struct YearView: View {
                         )
                     }
                     .buttonStyle(.plain)
-                    .disabled(summary.monthlyDaysWithData[index] == 0)
                 }
             }
         }
+    }
+
+    private var monthsWithData: [Int] {
+        (0..<12).filter { summary.monthlyDaysWithData[$0] > 0 }
     }
 
     // MARK: - Weight
@@ -236,7 +253,7 @@ struct YearView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
-            .background(.background, in: .rect(cornerRadius: 16))
+            .background(Color.card, in: .rect(cornerRadius: 16))
         }
     }
 
@@ -250,7 +267,7 @@ struct YearView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .background(.background, in: .rect(cornerRadius: 16))
+        .background(Color.card, in: .rect(cornerRadius: 16))
     }
 }
 
@@ -308,7 +325,7 @@ private struct YearMonth: View {
         }
         .padding(11)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.background, in: .rect(cornerRadius: 14))
+        .background(Color.card, in: .rect(cornerRadius: 14))
     }
 
     @ViewBuilder

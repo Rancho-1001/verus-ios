@@ -245,6 +245,33 @@ final class HealthKitService: @unchecked Sendable {
         }
     }
 
+    /// The date of the oldest step sample Health holds.
+    ///
+    /// The year view used to offer every year back to the start of the
+    /// calendar, so someone whose data begins in 2022 could page back to
+    /// 2019 and read "nothing recorded" three times. One query answers it:
+    /// the earliest sample there is.
+    func earliestActivityDate() async throws -> Date? {
+        guard Self.isAvailable else { throw HealthKitError.unavailable }
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: Self.stepType,
+                predicate: nil,
+                limit: 1,
+                sortDescriptors: [sort]
+            ) { _, samples, error in
+                if let error {
+                    continuation.resume(throwing: HealthKitError.queryFailed(error.localizedDescription))
+                    return
+                }
+                continuation.resume(returning: samples?.first?.startDate)
+            }
+            store.execute(query)
+        }
+    }
+
     // MARK: - Sleep
 
     /// Hours asleep, keyed by the morning each night ended on.

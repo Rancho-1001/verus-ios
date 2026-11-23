@@ -127,7 +127,7 @@ struct ActivityView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 14)
-        .background(.background, in: .rect(cornerRadius: 14))
+        .background(Color.card, in: .rect(cornerRadius: 14))
     }
 
     // MARK: - Weekly chart
@@ -142,7 +142,7 @@ struct ActivityView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 180)
-                    .background(.background, in: .rect(cornerRadius: 16))
+                    .background(Color.card, in: .rect(cornerRadius: 16))
             } else {
                 Chart {
                     ForEach(chartWeeks) { week in
@@ -186,7 +186,7 @@ struct ActivityView: View {
                 }
                 .frame(height: 190)
                 .padding(14)
-                .background(.background, in: .rect(cornerRadius: 16))
+                .background(Color.card, in: .rect(cornerRadius: 16))
             }
         }
     }
@@ -215,7 +215,7 @@ struct ActivityView: View {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(16)
-                    .background(.background, in: .rect(cornerRadius: 16))
+                    .background(Color.card, in: .rect(cornerRadius: 16))
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(recentWorkouts.prefix(12).enumerated()), id: \.element.id) { index, workout in
@@ -225,7 +225,7 @@ struct ActivityView: View {
                         }
                     }
                 }
-                .background(.background, in: .rect(cornerRadius: 16))
+                .background(Color.card, in: .rect(cornerRadius: 16))
             }
         }
     }

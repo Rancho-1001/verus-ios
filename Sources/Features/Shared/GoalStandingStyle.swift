@@ -67,3 +67,16 @@ extension GoalStanding {
         }
     }
 }
+
+extension Color {
+
+    /// The fill for a card sitting on the grouped background.
+    ///
+    /// Not `.background`. That resolves to `systemBackground`, which is
+    /// **pure black in dark mode** — the same colour as the grouped page
+    /// behind it, so every card in the app quietly dissolved into the
+    /// background the moment a dark theme existed. `secondarySystemGrouped`
+    /// is the one that is white on grey in light mode and #1C1C1E on black
+    /// in dark, which is what a card wants in both.
+    static let card = Color(.secondarySystemGroupedBackground)
+}

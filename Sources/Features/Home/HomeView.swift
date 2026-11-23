@@ -30,6 +30,7 @@ struct HomeView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
+                    header
                     sourceBanner
                     today
                     calendarCard
@@ -38,13 +39,13 @@ struct HomeView: View {
                 .padding(20)
             }
             .background(Color(.systemGroupedBackground))
-            .navigationTitle("Verus")
-            .toolbar {
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button("Share this month", systemImage: "square.and.arrow.up", action: share)
-                    Button("Settings", systemImage: "gearshape") { isShowingSettings = true }
-                }
-            }
+            // The title is drawn in the content rather than by the
+            // navigation bar, because a large navigation title occupies its
+            // own row *below* the bar — so a toolbar button sits above it
+            // and to the right of nothing, which is what "not aligned"
+            // looked like. Drawn here, the name and the buttons share a
+            // line because they are in the same `HStack`.
+            .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $isShowingSettings) {
                 SettingsSheet(weight: weight, activity: activity)
             }
@@ -69,6 +70,39 @@ struct HomeView: View {
                 TodayMetricSheet(metric: metric, activity: activity, weight: weight, grid: grid)
             }
         }
+    }
+
+    // MARK: - Title
+
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text("Verus")
+                .font(.system(size: 34, weight: .bold))
+            Spacer()
+            HStack(spacing: 18) {
+                headerButton("square.and.arrow.up", label: "Share this month", action: share)
+                headerButton("gearshape", label: "Settings") { isShowingSettings = true }
+            }
+        }
+        .padding(.top, 4)
+    }
+
+    /// Thumb-sized, like the month arrows. The glyph is around 20 points;
+    /// the tappable area is 44.
+    private func headerButton(
+        _ symbol: String,
+        label: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 19, weight: .medium))
+                .frame(width: 44, height: 44)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Color.accentColor)
+        .accessibilityLabel(label)
     }
 
     // MARK: - Where the numbers came from
@@ -208,7 +242,7 @@ struct HomeView: View {
         .padding(.horizontal, 13)
         .background {
             RoundedRectangle(cornerRadius: 14)
-                .fill(.background)
+                .fill(Color.card)
                 .overlay {
                     RoundedRectangle(cornerRadius: 14).fill(colour.opacity(0.09))
                 }
@@ -353,7 +387,7 @@ struct HomeView: View {
             )
         }
         .padding(16)
-        .background(.background, in: .rect(cornerRadius: 18))
+        .background(Color.card, in: .rect(cornerRadius: 18))
     }
 
     /// A month arrow with a thumb-sized hit area.
@@ -445,7 +479,7 @@ struct HomeView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 12)
-        .background(.background, in: .rect(cornerRadius: 14))
+        .background(Color.card, in: .rect(cornerRadius: 14))
     }
 
     // MARK: - Sharing
@@ -460,7 +494,13 @@ struct HomeView: View {
     /// not.
     @MainActor
     private func share() {
-        let renderer = ImageRenderer(content: MonthShareCard(grid: grid, activity: activity))
+        // Pinned to light. `ImageRenderer` would otherwise inherit the
+        // app's theme, and a near-black card dropped into a chat is harder
+        // to read than a white one — the share should look the same
+        // whoever sends it and whatever they have the app set to.
+        let card = MonthShareCard(grid: grid, activity: activity)
+            .environment(\.colorScheme, .light)
+        let renderer = ImageRenderer(content: card)
         renderer.scale = 3
         let caption = "\(grid.month.formatted(.dateTime.month(.wide).year())) in Verus"
         if let image = renderer.uiImage {

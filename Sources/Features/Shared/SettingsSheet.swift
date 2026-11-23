@@ -23,6 +23,8 @@ struct SettingsSheet: View {
     @State private var stepsText = ""
     @State private var activeText = ""
 
+    @AppStorage(Appearance.storageKey) private var appearance: Appearance = .system
+
     var body: some View {
         NavigationStack {
             Form {
@@ -62,6 +64,23 @@ struct SettingsSheet: View {
                     } footer: {
                         Text("Assumes you keep the lean mass you have now. Losing muscle alongside fat moves this number up.")
                     }
+                }
+
+                Section {
+                    Picker("Theme", selection: $appearance) {
+                        ForEach(Appearance.allCases) { option in
+                            Text(option.label).tag(option)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                } header: {
+                    Text("Appearance")
+                } footer: {
+                    // Said because this screen has a Save button and this
+                    // control ignores it: a theme is a view preference, not
+                    // a number to get right, so it applies as you tap.
+                    Text("Takes effect straight away. The goals above need Save.")
                 }
 
                 Section {

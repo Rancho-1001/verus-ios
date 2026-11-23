@@ -197,6 +197,25 @@ otherwise the composition that earlier versions did not read could never
 arrive. Apple Health has no type for body water, bone mass or visceral fat, so
 those never reach Verus and Verus does not pretend to have them.
 
+**A card is not `.background`.** That shape style resolves to
+`systemBackground`, which is pure black in dark mode — the same colour as
+the grouped page behind it. Every card in the app dissolved into the
+background the moment a dark theme existed, which is how a theme preference
+turned into a one-line fix in six files. `Color.card` is
+`secondarySystemGroupedBackground`: white on grey in light, #1C1C1E on black
+in dark.
+
+**The share card is rendered light whatever the app is set to.** A
+near-black card dropped into a chat is harder to read than a white one, and
+a share should look the same whoever sends it. `ImageRenderer` would
+otherwise inherit the app's theme.
+
+**The year shows the months that happened.** Twelve month grids with four of
+them empty is a calendar reminding you that a year has twelve months.
+Months with no readings are left out, and the year arrows stop at the first
+year Apple Health has anything for — a single query against the oldest step
+sample, rather than offering 2019 to someone whose data starts in 2022.
+
 **A burst of scale records is one weigh-in.** A connected scale writes two
 or three samples seconds apart as a reading settles, and Apple Health hands
 them over as separate weigh-ins. The trend was already safe — `TrendEngine`

@@ -158,7 +158,7 @@ struct FoodView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 9)
-        .background(.background, in: .rect(cornerRadius: 12))
+        .background(Color.card, in: .rect(cornerRadius: 12))
     }
 
     // MARK: - Actions
@@ -172,7 +172,7 @@ struct FoodView: View {
                     .font(.subheadline.weight(.medium))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 13)
-                    .background(.background, in: .rect(cornerRadius: 14))
+                    .background(Color.card, in: .rect(cornerRadius: 14))
             }
             .buttonStyle(.plain)
 
@@ -212,7 +212,7 @@ struct FoodView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
-            .background(.background, in: .rect(cornerRadius: 16))
+            .background(Color.card, in: .rect(cornerRadius: 16))
         } else {
             VStack(alignment: .leading, spacing: 14) {
                 ForEach(grouped, id: \.meal) { group in
@@ -274,7 +274,7 @@ struct FoodView: View {
                     }
                 }
             }
-            .background(.background, in: .rect(cornerRadius: 14))
+            .background(Color.card, in: .rect(cornerRadius: 14))
         }
     }
 
@@ -334,7 +334,7 @@ struct FoodView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
-            .background(.background, in: .rect(cornerRadius: 16))
+            .background(Color.card, in: .rect(cornerRadius: 16))
         }
     }
 }

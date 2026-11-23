@@ -178,7 +178,7 @@ struct WeightView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
-            .background(.background, in: .rect(cornerRadius: 16))
+            .background(Color.card, in: .rect(cornerRadius: 16))
         }
     }
 
@@ -226,7 +226,7 @@ struct WeightView: View {
                         .foregroundStyle(.tertiary)
                 }
                 .padding(14)
-                .background(.background, in: .rect(cornerRadius: 16))
+                .background(Color.card, in: .rect(cornerRadius: 16))
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
@@ -286,7 +286,7 @@ struct WeightView: View {
         .frame(height: 220)
         .padding(.vertical, 8)
         .padding(.horizontal, 12)
-        .background(.background, in: .rect(cornerRadius: 16))
+        .background(Color.card, in: .rect(cornerRadius: 16))
     }
 
     // MARK: - Weigh in
@@ -313,7 +313,7 @@ struct WeightView: View {
                     .frame(maxWidth: 118)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
-                    .background(.background, in: .rect(cornerRadius: 12))
+                    .background(Color.card, in: .rect(cornerRadius: 12))
                 Text("lb").foregroundStyle(.secondary)
 
                 // Optional, and visibly so. A scale that reports body fat is
@@ -325,7 +325,7 @@ struct WeightView: View {
                     .frame(maxWidth: 62)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 13)
-                    .background(.background, in: .rect(cornerRadius: 12))
+                    .background(Color.card, in: .rect(cornerRadius: 12))
                 Text("%").foregroundStyle(.secondary)
 
                 Spacer(minLength: 0)
@@ -392,7 +392,7 @@ struct WeightView: View {
                     }
                 }
             }
-            .background(.background, in: .rect(cornerRadius: 16))
+            .background(Color.card, in: .rect(cornerRadius: 16))
         }
     }
 }

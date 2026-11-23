@@ -72,7 +72,7 @@ struct ProgressTimelineView: View {
                     .font(.subheadline.weight(.medium))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 13)
-                    .background(.background, in: .rect(cornerRadius: 14))
+                    .background(Color.card, in: .rect(cornerRadius: 14))
             }
             .buttonStyle(.plain)
 
@@ -83,7 +83,7 @@ struct ProgressTimelineView: View {
                     .font(.subheadline.weight(.medium))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 13)
-                    .background(.background, in: .rect(cornerRadius: 14))
+                    .background(Color.card, in: .rect(cornerRadius: 14))
             }
             .buttonStyle(.plain)
         }
@@ -131,7 +131,7 @@ struct ProgressTimelineView: View {
         .frame(minWidth: 92, alignment: .leading)
         .padding(.vertical, 11)
         .padding(.horizontal, 13)
-        .background(.background, in: .rect(cornerRadius: 14))
+        .background(Color.card, in: .rect(cornerRadius: 14))
     }
 
     // MARK: - Timeline
@@ -157,7 +157,7 @@ struct ProgressTimelineView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(16)
-                .background(.background, in: .rect(cornerRadius: 16))
+                .background(Color.card, in: .rect(cornerRadius: 16))
             } else {
                 ForEach(moments) { moment in
                     momentCard(moment)
@@ -223,7 +223,7 @@ struct ProgressTimelineView: View {
                 .padding(.bottom, 13)
             }
         }
-        .background(.background, in: .rect(cornerRadius: 16))
+        .background(Color.card, in: .rect(cornerRadius: 16))
     }
 
     @ViewBuilder
