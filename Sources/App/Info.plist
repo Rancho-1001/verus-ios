@@ -37,6 +37,8 @@
 	<string>Verus saves the weight you enter back to Apple Health, so your other apps stay in step with it.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Verus uses the camera to photograph meals and progress photos.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Verus saves a shared month card to your photos when you ask it to.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Verus lets you choose meal and progress photos from your library.</string>
 </dict>

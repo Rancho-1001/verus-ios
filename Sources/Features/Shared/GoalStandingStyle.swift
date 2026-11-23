@@ -51,8 +51,13 @@ extension GoalStanding {
         }
     }
 
-    /// Said in words as well as in colour, because roughly one man in twelve
-    /// cannot tell this app's red from its green.
+    /// Spoken, never printed.
+    ///
+    /// Nothing on screen says "goal met" any more — the colour says it, and
+    /// a caption repeating it is a second voice agreeing with the first.
+    /// This string exists for VoiceOver, where there is no colour to read,
+    /// and for the roughly one man in twelve who cannot tell this app's red
+    /// from its green.
     var label: String {
         switch self {
         case .unknown: "no reading"

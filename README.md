@@ -242,6 +242,7 @@ number moves.
 | Screen | Job it does | Built |
 |---|---|:---:|
 | Home | The month at a glance: steps inside each date, weekly weight alongside | ✅ |
+| Share | The month as a card, rendered rather than screenshotted | ✅ |
 | Activity | Am I moving as much as I think I am, week over week? | ✅ |
 | Weight | Weigh in daily; trust the weekly average | ✅ |
 | Progress | Photos and measurements on the weight timeline | ✅ |
@@ -321,11 +322,14 @@ Stated plainly, because a README that only lists what works is a sales page.
   permission flow are confirmed on a device, body composition included;
   proving a write lands still needs a weigh-in typed into Verus and then found
   in the Health app.
-- **Colour does two jobs.** Red, amber and green on the calendar and year
-  grid are a verdict on a day against the step goal; red, green and blue on
-  the three Home tiles are an identity, saying only which number is which.
-  They are deliberately different scales and the app does not explain that
-  anywhere on screen.
+- **Colour does two jobs, and nothing on screen explains it.** Red, amber
+  and green on the calendar and year grid are a verdict on a day against the
+  step goal; red, green and blue on the three Home tiles are an identity,
+  saying only which number is which. The key under the calendar was removed
+  on purpose — colour that needs a caption is not yet doing its job — and
+  "goal met" went with it, for the same reason. Both still exist as
+  `GoalStanding.label`, spoken by VoiceOver where there is no colour to
+  read.
 - **No watch app, no Android, no barcode scanning, no sharing.** All are
   deliberate v2 scope.
 - **Sample data appears when Health has nothing**, clearly labelled. That is a

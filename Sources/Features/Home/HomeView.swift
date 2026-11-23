@@ -13,6 +13,8 @@ struct HomeView: View {
     @State private var monthAnchor: Date = .now
     @State private var selectedDay: Date?
     @State private var expandedMetric: TodayMetric?
+    @State private var isShowingSettings = false
+    @State private var shareItems: [Any]?
 
     private var calendar: Calendar { activity.calendar }
 
@@ -37,6 +39,23 @@ struct HomeView: View {
             }
             .background(Color(.systemGroupedBackground))
             .navigationTitle("Verus")
+            .toolbar {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button("Share this month", systemImage: "square.and.arrow.up", action: share)
+                    Button("Settings", systemImage: "gearshape") { isShowingSettings = true }
+                }
+            }
+            .sheet(isPresented: $isShowingSettings) {
+                SettingsSheet(weight: weight, activity: activity)
+            }
+            .sheet(isPresented: .init(
+                get: { shareItems != nil },
+                set: { if !$0 { shareItems = nil } }
+            )) {
+                if let shareItems {
+                    ShareSheet(items: shareItems)
+                }
+            }
             .task(id: grid.month) { await activity.load(grid: grid) }
             // The weigh-ins a smart scale wrote to Apple Health are pulled in
             // here, on the first screen, rather than waiting for the Weight
@@ -277,17 +296,20 @@ struct HomeView: View {
     private var stepsCaption: String {
         guard let today = activity.today else { return "no data yet" }
         let remaining = activity.dailyStepGoal - today.steps
-        let goalPart = remaining > 0 ? "\(Self.grouped(remaining)) to goal" : "goal met"
+        // Past the goal the line says nothing about the goal. The colour and
+        // the full rule underneath have already said it, and a caption that
+        // repeats them is a third voice agreeing with the first two.
+        let goalPart = remaining > 0 ? "\(Self.grouped(remaining)) to goal" : ""
         guard let miles = today.miles else { return goalPart }
-        return "\(miles.formatted(.number.precision(.fractionLength(1)))) mi · \(goalPart)"
+        return goalPart.isEmpty
+            ? "\(miles.formatted(.number.precision(.fractionLength(1)))) mi"
+            : "\(miles.formatted(.number.precision(.fractionLength(1)))) mi · \(goalPart)"
     }
 
     private var activeCaption: String {
         guard let today = activity.today else { return "no data yet" }
         let remaining = Double(activity.dailyActiveEnergyGoal) - today.activeKilocalories
-        return remaining > 0
-            ? "\(Int(remaining.rounded())) kcal to goal"
-            : "goal met · \(Int(today.totalKilocalories)) total"
+        return remaining > 0 ? "\(Int(remaining.rounded())) kcal to goal" : ""
     }
 
     // MARK: - Calendar
@@ -424,6 +446,42 @@ struct HomeView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 12)
         .background(.background, in: .rect(cornerRadius: 14))
+    }
+
+    // MARK: - Sharing
+
+    /// Renders the month to an image and hands it to the system share
+    /// sheet.
+    ///
+    /// Rendered rather than screenshotted, so what leaves the phone is the
+    /// month and its three figures — not the permission banner, the tab bar
+    /// and the weekly weight column that happen to be on screen. Nothing is
+    /// sent anywhere: the share sheet opens and the user chooses, or does
+    /// not.
+    @MainActor
+    private func share() {
+        let renderer = ImageRenderer(content: MonthShareCard(grid: grid, activity: activity))
+        renderer.scale = 3
+        let caption = "\(grid.month.formatted(.dateTime.month(.wide).year())) in Verus"
+        if let image = renderer.uiImage {
+            shareItems = [MonthShareItem(image: image, caption: caption)]
+        } else {
+            // A failed render is not a reason to do nothing — the figures
+            // are the point and they fit in a line of text.
+            shareItems = [shareText]
+        }
+    }
+
+    private var shareText: String {
+        var parts = ["\(grid.month.formatted(.dateTime.month(.wide).year())) in Verus"]
+        if let average = activity.averageSteps(in: grid) {
+            parts.append("\(Self.grouped(average)) steps a day")
+        }
+        if let miles = activity.totalMiles(in: grid) {
+            parts.append("\(miles.formatted(.number.precision(.fractionLength(0)))) miles")
+        }
+        parts.append("\(activity.daysAtGoal(in: grid)) days at goal")
+        return parts.joined(separator: " · ")
     }
 
     static func grouped(_ value: Int) -> String {

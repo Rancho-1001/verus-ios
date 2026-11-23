@@ -34,10 +34,11 @@ struct WeightView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Goals", systemImage: "target") { isEditingGoals = true }
+                        .accessibilityLabel("Goals and settings")
                 }
             }
             .sheet(isPresented: $isEditingGoals) {
-                GoalsSheet(weight: store, activity: activity)
+                SettingsSheet(weight: store, activity: activity)
             }
         }
     }

@@ -19,6 +19,9 @@ struct MonthCalendarView: View {
     /// an abbreviated step count — "8.4k" — because that is what fits inside
     /// a date cell; the exact figure lives behind this.
     var onSelect: (Date) -> Void = { _ in }
+    /// The weekly weight in the trailing gutter. Off for the share card:
+    /// the one number on this screen nobody wants to post by accident.
+    var showsWeight = true
 
     private var calendar: Calendar { activity.calendar }
 
@@ -39,10 +42,12 @@ struct MonthCalendarView: View {
                     .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity)
             }
-            Text("lb")
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(.tertiary)
-                .frame(width: gutterWidth)
+            if showsWeight {
+                Text("lb")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+                    .frame(width: gutterWidth)
+            }
         }
     }
 
@@ -61,8 +66,10 @@ struct MonthCalendarView: View {
                 .disabled(isFuture || !day.isInMonth)
                 .frame(maxWidth: .infinity)
             }
-            weekWeight(week)
-                .frame(width: gutterWidth)
+            if showsWeight {
+                weekWeight(week)
+                    .frame(width: gutterWidth)
+            }
         }
     }
 

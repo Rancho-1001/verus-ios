@@ -150,7 +150,7 @@ struct TodayMetricSheet: View {
         let remaining = activity.dailyStepGoal - steps
         return remaining > 0
             ? "\(HomeView.grouped(remaining)) to go of \(HomeView.grouped(activity.dailyStepGoal))"
-            : "goal met"
+            : ""
     }
 
     // MARK: - Active energy
@@ -250,7 +250,7 @@ struct TodayMetricSheet: View {
         let remaining = Double(activity.dailyActiveEnergyGoal) - active
         return remaining > 0
             ? "\(Int(remaining.rounded())) kcal to go of \(activity.dailyActiveEnergyGoal)"
-            : "goal met"
+            : ""
     }
 
     private var todaysWorkouts: [Workout] {
@@ -481,9 +481,11 @@ struct TodayMetricSheet: View {
                 }
                 .frame(height: 6)
             }
-            Text(detail)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+            if !detail.isEmpty {
+                Text(detail)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(.vertical, 6)
         .accessibilityElement(children: .combine)

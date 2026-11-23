@@ -1,11 +1,19 @@
 import SwiftUI
 
-/// Setting the three numbers the rest of the app aims at.
+/// The goals the rest of the app aims at, and the handful of facts about
+/// where its numbers come from.
+///
+/// There is one of these, reached from Home and from the Weight screen,
+/// rather than a Goals sheet in one place and a Settings sheet in another
+/// holding the same four fields. Verus has four numbers to set and nothing
+/// to configure beyond them: no account, no sync, no theme, no units switch
+/// yet. A settings screen padded out to look substantial would be inventing
+/// decisions for the user to make.
 ///
 /// The body-fat goal is optional on purpose. Plenty of people track weight
 /// and never own a body-fat scale, and every screen has to make sense for
 /// them — so the field can be left empty and nothing downstream breaks.
-struct GoalsSheet: View {
+struct SettingsSheet: View {
     @Bindable var weight: WeightStore
     @Bindable var activity: ActivityStore
     @Environment(\.dismiss) private var dismiss
@@ -40,7 +48,7 @@ struct GoalsSheet: View {
                     // the Home tiles turn red under half the goal, amber on
                     // the way and green at it. Said here so the numbers are
                     // understood as the lines they are.
-                    Text("Home colours today against these: red under half, amber on the way, green at the goal.")
+                    Text("The month calendar reads against the step goal: red under half, amber on the way, green at it.")
                 }
 
                 if let line = relationshipLine {
@@ -55,8 +63,28 @@ struct GoalsSheet: View {
                         Text("Assumes you keep the lean mass you have now. Losing muscle alongside fat moves this number up.")
                     }
                 }
+
+                Section {
+                    LabeledContent("Apple Health", value: healthStatus)
+                    Button("Open Health settings", action: openSettings)
+                } header: {
+                    Text("Where the numbers come from")
+                } footer: {
+                    // The honest version of this, which most apps get
+                    // wrong: Apple does not tell an app that a read was
+                    // refused, so Verus cannot list what it is allowed to
+                    // see. It can say what arrived.
+                    Text("Apple Health never tells an app which readings it was refused, so Verus can only report what arrived. Health › Data Access shows what it is actually allowed to read.")
+                }
+
+                Section {
+                    LabeledContent("Version", value: Self.version)
+                    LabeledContent("Made by", value: "Nyansapo Labs")
+                } footer: {
+                    Text("Everything Verus records stays on this phone. There is no account and no server.")
+                }
             }
-            .navigationTitle("Goals")
+            .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -68,6 +96,30 @@ struct GoalsSheet: View {
             }
             .onAppear(perform: fill)
         }
+    }
+
+    /// What the app can honestly say about its Health access: whether it
+    /// asked, and whether anything came back.
+    private var healthStatus: String {
+        switch activity.state {
+        case .live: "Reading your data"
+        case .needsPermission: "Not connected yet"
+        case .noDataFromHealth: "Connected, nothing arrived"
+        case .unavailable: "Unavailable on this device"
+        case .failed: "Last read failed"
+        }
+    }
+
+    static var version: String {
+        let bundle = Bundle.main
+        let short = bundle.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
+        let build = bundle.infoDictionary?["CFBundleVersion"] as? String ?? "—"
+        return "\(short) (\(build))"
+    }
+
+    private func openSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
     }
 
     private func field(_ title: String, text: Binding<String>, unit: String) -> some View {
