@@ -83,10 +83,20 @@ representable and an invented one is not, so "never promise a faster date than
 the data supports" is a property of the type rather than a thing to remember
 while writing a view.
 
-**Smoothing is an EWMA at α = 0.10**, roughly a nineteen-day centre of mass. A
-6 lb salty-dinner spike moves the line under a pound. Days with no weigh-in
-carry the trend forward rather than being skipped, so a fortnight away from the
-scale does not render as one overnight drop.
+**Smoothing is an EWMA at α = 0.10 per elapsed day**, roughly a nineteen-day
+centre of mass. A 6 lb salty-dinner spike moves the line under a pound. Days
+with no weigh-in carry the trend forward rather than being skipped, so a
+fortnight away from the scale does not render as one overnight drop.
+
+*Per elapsed day* is the part that was wrong for a while. The first version
+applied α once per **reading**, which is a nineteen-day average only if you
+weigh in daily. On a real file — 21 readings across 261 days, one every
+twelve — nineteen readings spanned eight months, and the trend sat 1.9 lb
+above a scale that had been saying something lower since the summer. The
+weight now compounds over the gap, `1 - (1-α)^days`: a reading the next
+morning moves the line by α as before, one a fortnight later moves it most
+of the way, and one after a month of silence all but replaces a trend with
+no claim to still be true.
 
 **HealthKit never says a read was denied.** Apple treats "this app may not see
 your steps" as itself private, so a denied type returns an empty result

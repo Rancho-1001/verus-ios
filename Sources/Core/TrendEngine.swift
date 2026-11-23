@@ -77,14 +77,35 @@ enum TrendEngine {
 
         var points: [TrendPoint] = []
         var smoothed: Double?
+        var lastReadingDay: Date?
         var day = first
 
         while day <= last {
             let raw = byDay[day]?.kilograms
             if let raw {
-                // The first reading seeds the line rather than being smoothed
-                // towards zero from nothing.
-                smoothed = smoothed.map { $0 + alpha * (raw - $0) } ?? raw
+                if let previous = smoothed, let lastReadingDay {
+                    // **Elapsed days, not readings.** The first version moved
+                    // the line by alpha once per weigh-in, which is only a
+                    // nineteen-day average if you weigh in daily. Weigh in
+                    // once a fortnight and nineteen readings span eight
+                    // months — the line then sits stubbornly above a scale
+                    // that has been saying something else since the summer,
+                    // which is exactly the complaint that found this.
+                    //
+                    // Compounding alpha over the gap fixes it: a reading the
+                    // next day moves the line by alpha as before, one a
+                    // fortnight later moves it most of the way, and one after
+                    // a month of silence all but replaces a trend that has
+                    // no claim to still be true.
+                    let gap = calendar.dateComponents([.day], from: lastReadingDay, to: day).day ?? 1
+                    let weight = 1 - pow(1 - alpha, Double(max(gap, 1)))
+                    smoothed = previous + weight * (raw - previous)
+                } else {
+                    // The first reading seeds the line rather than being
+                    // smoothed towards zero from nothing.
+                    smoothed = raw
+                }
+                lastReadingDay = day
             }
             if let smoothed {
                 points.append(TrendPoint(date: day, kilograms: smoothed, rawKilograms: raw))
