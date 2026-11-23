@@ -60,6 +60,8 @@ struct FoodEntry: Identifiable, Hashable, Sendable {
         /// gated on the accuracy spike — but the case exists so the storage
         /// format does not have to change when it lands.
         case photoEstimate
+        /// Logged in another app and read out of Apple Health.
+        case appleHealth
     }
 
     let id: UUID
@@ -71,6 +73,16 @@ struct FoodEntry: Identifiable, Hashable, Sendable {
     let fatGrams: Double?
     let meal: Meal
     let source: Source
+    /// The Apple Health sample this came from.
+    ///
+    /// Carried so a re-import can recognise its own rows exactly rather than
+    /// guessing from the day and the calorie count — two identical snacks an
+    /// hour apart are two entries, and a matching rule loose enough to
+    /// survive an edit would merge them.
+    let healthIdentifier: UUID?
+    /// The app that wrote it, as Health reports it — "MyFitnessPal", "Lose
+    /// It!". Shown so a number logged somewhere else is readable as such.
+    let externalSourceName: String?
 
     init(
         id: UUID = UUID(),
@@ -81,7 +93,9 @@ struct FoodEntry: Identifiable, Hashable, Sendable {
         carbGrams: Double? = nil,
         fatGrams: Double? = nil,
         meal: Meal,
-        source: Source = .manual
+        source: Source = .manual,
+        healthIdentifier: UUID? = nil,
+        externalSourceName: String? = nil
     ) {
         self.id = id
         self.date = date
@@ -92,7 +106,33 @@ struct FoodEntry: Identifiable, Hashable, Sendable {
         self.fatGrams = fatGrams
         self.meal = meal
         self.source = source
+        self.healthIdentifier = healthIdentifier
+        self.externalSourceName = externalSourceName
     }
 
     var isEstimate: Bool { source == .photoEstimate }
+
+    var isFromHealth: Bool { source == .appleHealth }
+
+    var hasMacros: Bool {
+        proteinGrams != nil || carbGrams != nil || fatGrams != nil
+    }
+
+    /// A copy carrying another row's figures, keeping this row's identity.
+    /// Used when an entry is edited in the app that wrote it.
+    func updated(from other: FoodEntry) -> FoodEntry {
+        FoodEntry(
+            id: id,
+            date: other.date,
+            name: other.name,
+            kilocalories: other.kilocalories,
+            proteinGrams: other.proteinGrams,
+            carbGrams: other.carbGrams,
+            fatGrams: other.fatGrams,
+            meal: other.meal,
+            source: other.source,
+            healthIdentifier: other.healthIdentifier,
+            externalSourceName: other.externalSourceName
+        )
+    }
 }

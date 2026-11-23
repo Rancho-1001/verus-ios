@@ -21,11 +21,62 @@ final class FoodStore {
     }()
 
     private let fileURL: URL?
+    private let health: HealthKitService?
 
-    init(fileURL: URL? = FoodStore.defaultFileURL) {
+    /// What the last sync did, for the screen to report rather than leaving
+    /// the user to spot the difference.
+    private(set) var lastImportCount = 0
+    private(set) var lastRemovedCount = 0
+    private(set) var isSyncing = false
+
+    init(
+        fileURL: URL? = FoodStore.defaultFileURL,
+        health: HealthKitService? = HealthKitService.isAvailable ? HealthKitService() : nil
+    ) {
         self.fileURL = fileURL
+        self.health = health
         load()
     }
+
+    // MARK: - Apple Health
+
+    /// Pulls in food logged elsewhere.
+    ///
+    /// Verus writes nothing to Health's dietary types, so everything that
+    /// comes back was logged in another app and the two sets cannot
+    /// double-count. The merge rules — including deleting rows the other app
+    /// deleted — are in `DietaryImport.merge`.
+    ///
+    /// Thirty days rather than a year: a food log is dense, and nobody is
+    /// scrolling back to last March in this app.
+    @discardableResult
+    func syncFromHealth(days: Int = 30) async -> Int {
+        guard let health else { return 0 }
+        let end = Date.now
+        guard let start = calendar.date(byAdding: .day, value: -days, to: end) else { return 0 }
+
+        isSyncing = true
+        defer { isSyncing = false }
+
+        guard let imported = try? await health.dietaryEntries(
+            from: start, to: end, calendar: calendar
+        ) else { return 0 }
+
+        let result = DietaryImport.merge(
+            existing: entries, imported: imported, window: start...end
+        )
+        if result.added > 0 || result.updated > 0 || result.removed > 0 {
+            entries = result.entries
+            save()
+        }
+        lastImportCount = result.added
+        lastRemovedCount = result.removed
+        return result.added
+    }
+
+    /// Whether anything on screen came from another app — what decides
+    /// whether the Food screen explains where its numbers are from.
+    var hasHealthEntries: Bool { entries.contains(where: \.isFromHealth) }
 
     static var defaultFileURL: URL? {
         try? FileManager.default
@@ -82,6 +133,10 @@ final class FoodStore {
         let fatGrams: Double?
         let meal: Meal
         let source: FoodEntry.Source
+        /// Added after the first release: optional in, optional out, so a
+        /// file written by the earlier version still decodes.
+        let healthIdentifier: UUID?
+        let externalSourceName: String?
 
         init(_ entry: FoodEntry) {
             id = entry.id
@@ -93,13 +148,16 @@ final class FoodStore {
             fatGrams = entry.fatGrams
             meal = entry.meal
             source = entry.source
+            healthIdentifier = entry.healthIdentifier
+            externalSourceName = entry.externalSourceName
         }
 
         var entry: FoodEntry {
             FoodEntry(
                 id: id, date: date, name: name, kilocalories: kilocalories,
                 proteinGrams: proteinGrams, carbGrams: carbGrams, fatGrams: fatGrams,
-                meal: meal, source: source
+                meal: meal, source: source,
+                healthIdentifier: healthIdentifier, externalSourceName: externalSourceName
             )
         }
     }

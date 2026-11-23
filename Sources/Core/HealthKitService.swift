@@ -44,6 +44,10 @@ final class HealthKitService: @unchecked Sendable {
     private static let heightType = HKQuantityType(.height)
     private static let waistType = HKQuantityType(.waistCircumference)
     private static let sleepType = HKCategoryType(.sleepAnalysis)
+    private static let dietaryEnergyType = HKQuantityType(.dietaryEnergyConsumed)
+    private static let proteinType = HKQuantityType(.dietaryProtein)
+    private static let carbsType = HKQuantityType(.dietaryCarbohydrates)
+    private static let fatType = HKQuantityType(.dietaryFatTotal)
     private static let bodyMassType = HKQuantityType(.bodyMass)
     private static let bodyFatType = HKQuantityType(.bodyFatPercentage)
     private static let leanMassType = HKQuantityType(.leanBodyMass)
@@ -79,6 +83,7 @@ final class HealthKitService: @unchecked Sendable {
             exerciseTimeType, flightsType,
             restingHeartRateType, hrvType, sleepType,
             heightType, waistType,
+            dietaryEnergyType, proteinType, carbsType, fatType,
             HKObjectType.workoutType(),
         ])
     }
@@ -277,6 +282,67 @@ final class HealthKitService: @unchecked Sendable {
         }
 
         return SleepRollup.hoursByNight(sessions, calendar: calendar)
+    }
+
+    // MARK: - Food
+
+    /// Meals logged in other apps, with their macros where they can be
+    /// matched.
+    ///
+    /// Verus does not write food to Health, so everything read here came
+    /// from somewhere else and nothing can be read back as a duplicate of
+    /// Verus's own log. `DietaryImport` says what depends on that.
+    func dietaryEntries(from start: Date, to end: Date, calendar: Calendar) async throws -> [FoodEntry] {
+        guard Self.isAvailable else { throw HealthKitError.unavailable }
+
+        async let energy = dietaryReadings(from: start, to: end)
+        async let protein = quantitySamples(of: Self.proteinType, unit: .gram(), from: start, to: end)
+        async let carbs = quantitySamples(of: Self.carbsType, unit: .gram(), from: start, to: end)
+        async let fat = quantitySamples(of: Self.fatType, unit: .gram(), from: start, to: end)
+
+        let (readings, proteinSamples, carbSamples, fatSamples) =
+            try await (energy, protein, carbs, fat)
+
+        return DietaryImport.entries(
+            from: readings,
+            protein: proteinSamples,
+            carbs: carbSamples,
+            fat: fatSamples,
+            calendar: calendar
+        )
+    }
+
+    private func dietaryReadings(from start: Date, to end: Date) async throws -> [DietaryReading] {
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: .strictStartDate)
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: Self.dietaryEnergyType,
+                predicate: predicate,
+                limit: HKObjectQueryNoLimit,
+                sortDescriptors: [sort]
+            ) { _, samples, error in
+                if let error {
+                    continuation.resume(throwing: HealthKitError.queryFailed(error.localizedDescription))
+                    return
+                }
+                let readings = (samples as? [HKQuantitySample] ?? []).map { sample in
+                    DietaryReading(
+                        healthIdentifier: sample.uuid,
+                        date: sample.startDate,
+                        kilocalories: sample.quantity.doubleValue(for: .kilocalorie()),
+                        // Most logging apps put the food's name here. The
+                        // ones that do not fall back to their own name,
+                        // which at least says where the number came from.
+                        foodName: sample.metadata?[HKMetadataKeyFoodType] as? String,
+                        sourceName: sample.sourceRevision.source.name
+                    )
+                }
+                continuation.resume(returning: readings)
+            }
+            store.execute(query)
+        }
     }
 
     // MARK: - Body measurements

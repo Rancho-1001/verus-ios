@@ -32,7 +32,7 @@
 	     asks for plain language, so they say what is read and why, in one
 	     sentence each, with no marketing. -->
 	<key>NSHealthShareUsageDescription</key>
-	<string>Verus reads your steps, distance, workouts, energy burned, weight and body composition from Apple Health so you do not have to type them in twice.</string>
+	<string>Verus reads your steps, distance, workouts, energy burned, sleep, heart rate, weight, body composition and the food you log elsewhere from Apple Health, so you do not have to type any of it in twice.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>Verus saves the weight you enter back to Apple Health, so your other apps stay in step with it.</string>
 	<key>NSCameraUsageDescription</key>

@@ -42,6 +42,10 @@ struct FoodView: View {
                 FoodEntrySheet(food: food)
             }
             .task { await activity.loadRecent(weeks: 2) }
+            // Meals logged in another app arrive here rather than having to
+            // be typed in twice. Verus writes nothing back, so the two sets
+            // cannot double-count — see `DietaryImport`.
+            .task { await food.syncFromHealth() }
         }
     }
 
@@ -201,7 +205,7 @@ struct FoodView: View {
         if grouped.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Nothing logged today.").font(.subheadline.weight(.medium))
-                Text("Photo logging is the plan, and it is not built yet — the accuracy of a calorie estimate from a photograph is still an open question, and it is not worth shipping before it is answered. Manual entry works now.")
+                Text("Anything logged in another app that writes to Apple Health appears here on its own. Photo logging is the plan and is not built yet — the accuracy of a calorie estimate from a photograph is still an open question, and it is not worth shipping before it is answered. Manual entry works now.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -231,12 +235,21 @@ struct FoodView: View {
             }
             VStack(spacing: 0) {
                 ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
-                    HStack {
-                        Text(entry.name).font(.subheadline)
-                        if entry.isEstimate {
-                            Text("est.")
-                                .font(.system(size: 9, weight: .medium))
-                                .foregroundStyle(.orange)
+                    HStack(alignment: .firstTextBaseline) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: 5) {
+                                Text(entry.name).font(.subheadline)
+                                if entry.isEstimate {
+                                    Text("est.")
+                                        .font(.system(size: 9, weight: .medium))
+                                        .foregroundStyle(.orange)
+                                }
+                            }
+                            if let detail = detailLine(entry) {
+                                Text(detail)
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                            }
                         }
                         Spacer()
                         Text("\(Int(entry.kilocalories))")
@@ -247,8 +260,14 @@ struct FoodView: View {
                     .padding(.vertical, 10)
                     .padding(.horizontal, 14)
                     .contentShape(.rect)
-                    .swipeActions {
-                        Button("Delete", role: .destructive) { food.delete(entry) }
+                    // Was `.swipeActions`, which does nothing outside a
+                    // `List` — the gesture simply never fired, so a logged
+                    // meal could not be removed at all. A context menu works
+                    // anywhere and is one long press.
+                    .contextMenu {
+                        Button("Delete", systemImage: "trash", role: .destructive) {
+                            food.delete(entry)
+                        }
                     }
                     if index < entries.count - 1 {
                         Divider().padding(.leading, 14)
@@ -257,6 +276,31 @@ struct FoodView: View {
             }
             .background(.background, in: .rect(cornerRadius: 14))
         }
+    }
+
+    /// Where a figure came from, and what was in it.
+    ///
+    /// Said on the row rather than in a footnote: a number Verus was handed
+    /// by another app is a different kind of claim from one typed in here,
+    /// and the screen should not flatten the two.
+    private func detailLine(_ entry: FoodEntry) -> String? {
+        var parts: [String] = []
+        // Not when the row is already named after the app — an app that
+        // writes no food name gives "Health / via Health", which says the
+        // same thing twice.
+        if entry.isFromHealth, let source = entry.externalSourceName, source != entry.name {
+            parts.append("via \(source)")
+        }
+        if let protein = entry.proteinGrams {
+            parts.append("P \(Int(protein.rounded()))g")
+        }
+        if let carbs = entry.carbGrams {
+            parts.append("C \(Int(carbs.rounded()))g")
+        }
+        if let fat = entry.fatGrams {
+            parts.append("F \(Int(fat.rounded()))g")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     // MARK: - What it implies
