@@ -69,7 +69,7 @@ struct WeighInListView: View {
                 }
                 .onDelete(perform: delete)
             } header: {
-                Text("\(entries.count) weigh-in\(entries.count == 1 ? "" : "s")")
+                Text(countHeader)
             } footer: {
                 Text("Swipe a weigh-in to delete it. Deleting here does not remove it from Apple Health — the Health app is where that lives.")
             }
@@ -108,6 +108,16 @@ struct WeighInListView: View {
         }
     }
 
+    /// Records, and how many of them are actually separate weigh-ins.
+    private var countHeader: String {
+        let records = entries.count
+        let sessions = store.sessions.count
+        guard sessions < records else {
+            return "\(records) weigh-in\(records == 1 ? "" : "s")"
+        }
+        return "\(sessions) weigh-in\(sessions == 1 ? "" : "s") · \(records) records"
+    }
+
     private var syncFooter: String {
         guard store.lastSyncAt != nil else {
             return "Pulls weigh-ins and body composition recorded by a smart scale or another app. Runs on its own when Verus opens; this is for when you want it now."
@@ -128,11 +138,13 @@ struct WeighInListView: View {
     }
 
     private func row(_ entry: WeightEntry) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
+        let superseded = store.supersededIDs.contains(entry.id)
+        return VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .firstTextBaseline) {
                 Text("\(entry.pounds, format: .number.precision(.fractionLength(1))) lb")
                     .font(.body.weight(.medium))
                     .monospacedDigit()
+                    .foregroundStyle(superseded ? .secondary : .primary)
                 Spacer()
                 Text(entry.date, format: .dateTime.weekday(.abbreviated).day().month().hour().minute())
                     .font(.caption)
@@ -143,6 +155,15 @@ struct WeighInListView: View {
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .monospacedDigit()
+            }
+            // Kept and shown, but not counted twice. A scale writes two or
+            // three records as a weigh-in settles; the last one is the
+            // reading, and saying so is better than quietly dropping the
+            // others from a list that claims to be the record.
+            if superseded {
+                Text("superseded by a reading moments later")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
             }
         }
     }

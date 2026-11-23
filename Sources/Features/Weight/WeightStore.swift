@@ -164,12 +164,23 @@ final class WeightStore {
 
     // MARK: - Derived
 
+    /// One entry per step onto the scale.
+    ///
+    /// Everything derived reads this rather than `entries`, because a smart
+    /// scale writes several records per session and they are not several
+    /// weigh-ins. `entries` stays whole so the list can still show
+    /// everything that was recorded; see `WeighInSession`.
+    var sessions: [WeightEntry] { WeighInSession.collapse(entries) }
+
+    /// The records a session collapse supersedes, for the list to mark.
+    var supersededIDs: Set<UUID> { WeighInSession.superseded(in: entries) }
+
     var weeklyAverages: [WeeklyAverage] {
-        TrendEngine.weeklyAverages(from: entries, calendar: calendar)
+        TrendEngine.weeklyAverages(from: sessions, calendar: calendar)
     }
 
     var trend: [TrendPoint] {
-        TrendEngine.smoothedTrend(from: entries, calendar: calendar)
+        TrendEngine.smoothedTrend(from: sessions, calendar: calendar)
     }
 
     var rateKilogramsPerWeek: Double? {
@@ -188,7 +199,7 @@ final class WeightStore {
     /// The headline number: the smoothed trend, not this morning's reading.
     var trendPounds: Double? { trend.last?.pounds }
 
-    var latestEntry: WeightEntry? { entries.max { $0.date < $1.date } }
+    var latestEntry: WeightEntry? { sessions.max { $0.date < $1.date } }
 
     /// The most recent body-fat reading, from whenever it was taken.
     ///
@@ -197,7 +208,7 @@ final class WeightStore {
     /// figure is the best estimate of current composition, and the UI says
     /// when it was taken rather than implying it is fresh.
     var latestBodyFatEntry: WeightEntry? {
-        entries.filter { $0.bodyFatPercent != nil }.max { $0.date < $1.date }
+        sessions.filter { $0.bodyFatPercent != nil }.max { $0.date < $1.date }
     }
 
     var latestBodyFatPercent: Double? { latestBodyFatEntry?.bodyFatPercent }
@@ -205,7 +216,7 @@ final class WeightStore {
     /// The most recent weigh-in that carried anything beyond the weight —
     /// what a smart scale produces and a typed number does not.
     var latestCompositionEntry: WeightEntry? {
-        entries.filter(\.hasComposition).max { $0.date < $1.date }
+        sessions.filter(\.hasComposition).max { $0.date < $1.date }
     }
 
     /// Whether any weigh-in has ever arrived with composition attached. The

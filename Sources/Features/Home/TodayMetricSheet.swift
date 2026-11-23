@@ -375,7 +375,7 @@ struct TodayMetricSheet: View {
     /// is the whole point of the product and so is worth saying out loud.
     private var weightHeadlineDetail: String {
         guard weight.trendPounds != nil else { return "no weigh-ins yet" }
-        let count = weight.entries.count
+        let count = weight.sessions.count
         return "\(count) weigh-in\(count == 1 ? "" : "s"), weighted toward the last 19 days"
     }
 
