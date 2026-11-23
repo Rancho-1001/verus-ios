@@ -21,14 +21,20 @@ extension GoalStanding {
 
     /// The wash behind a day's number in the calendar and the year grid.
     ///
-    /// Deliberately faint, and faint across all three bands: the number
-    /// printed on top is the thing being read, and a saturated cell wins that
-    /// fight. `share` gives a little gradation inside each band, so a 14,000
-    /// step day is a shade warmer than an 8,000 step one without changing
-    /// what colour it is.
+    /// This started faint, on the theory that the number printed on top is
+    /// the thing being read and a saturated cell would win that fight. In
+    /// use it was the wrong trade: at 0.13 to 0.28 the three bands were
+    /// three pastels, and telling them apart at arm's length — which is the
+    /// entire job — meant looking rather than glancing.
+    ///
+    /// 0.30 to 0.65 is deep enough to read as red, amber and green while
+    /// still carrying black text in light mode and white text in dark.
+    /// `share` keeps a little gradation inside each band, so a 14,000 step
+    /// day is warmer than an 8,000 step one without changing what colour it
+    /// is.
     func fill(share: Double) -> Color {
-        guard self != .unknown else { return .primary.opacity(0.05) }
-        return color.opacity(0.13 + min(max(share, 0), 1) * 0.15)
+        guard self != .unknown else { return .primary.opacity(0.06) }
+        return color.opacity(0.30 + min(max(share, 0), 1) * 0.35)
     }
 
     /// For a tile that wants to say its standing with more than a number.

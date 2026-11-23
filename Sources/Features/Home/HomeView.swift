@@ -244,7 +244,7 @@ struct HomeView: View {
             RoundedRectangle(cornerRadius: 14)
                 .fill(Color.card)
                 .overlay {
-                    RoundedRectangle(cornerRadius: 14).fill(colour.opacity(0.09))
+                    RoundedRectangle(cornerRadius: 14).fill(colour.opacity(0.15))
                 }
         }
         .accessibilityElement(children: .ignore)

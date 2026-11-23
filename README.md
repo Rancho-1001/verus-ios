@@ -176,7 +176,12 @@ tint each day with one colour at varying strength, which is honest and slow:
 telling a 6,000-step day from a 12,000-step one meant comparing two shades of
 the same green. `GoalStanding` names three bands instead — short, closing, met
 — and the month grid, the year grid and the Home tiles all read from it, so
-they cannot drift into three different reds. There is deliberately no band
+they cannot drift into three different reds. The fills started at 0.13–0.28
+opacity, on the theory that the number printed on top should win; in daily
+use that was three pastels and telling them apart meant looking rather than
+glancing. 0.30–0.65 is deep enough to read as red, amber and green from
+arm's length while still carrying black text in light mode and white in
+dark. There is deliberately no band
 above the goal: 40,000 steps is the same verdict as 15,000 with a bigger
 number next to it. The band is also written out in words for VoiceOver and
 printed as a key under the calendar, because roughly one man in twelve cannot
