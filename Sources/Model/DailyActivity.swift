@@ -15,10 +15,39 @@ struct DailyActivity: Identifiable, Hashable, Sendable {
     /// Resting energy in kilocalories. Needed later so the Food screen can
     /// show intake against total burn rather than against active burn alone.
     let restingKilocalories: Double
+    /// Walking and running distance in metres, when Health reported any.
+    ///
+    /// Optional rather than zero, and it is a separate reading from steps
+    /// rather than a sum derived from them: the phone measures distance with
+    /// GPS and stride length, so a 10,000-step hill walk and a 10,000-step
+    /// flat walk are not the same distance. Multiplying steps by an assumed
+    /// stride would be inventing a number the phone already knows.
+    let distanceMeters: Double?
+
+    /// Defaulted so the two dozen places that construct a day for a test do
+    /// not all have to say "no distance".
+    init(
+        day: Date,
+        steps: Int,
+        activeKilocalories: Double,
+        restingKilocalories: Double,
+        distanceMeters: Double? = nil
+    ) {
+        self.day = day
+        self.steps = steps
+        self.activeKilocalories = activeKilocalories
+        self.restingKilocalories = restingKilocalories
+        self.distanceMeters = distanceMeters
+    }
 
     var id: Date { day }
 
     var totalKilocalories: Double { activeKilocalories + restingKilocalories }
+
+    static let metersPerMile = 1_609.344
+
+    /// Distance in miles, when there is a distance to report.
+    var miles: Double? { distanceMeters.map { $0 / Self.metersPerMile } }
 }
 
 /// Where daily activity comes from.
@@ -83,7 +112,11 @@ struct SampleActivitySource: ActivitySource {
                 // Roughly 0.04 kcal per step for a ~180 lb walker, plus a
                 // baseline for everything that is not walking.
                 activeKilocalories: Double(steps) * 0.04 + Double.random(in: 40...220, using: &rng),
-                restingKilocalories: Double.random(in: 1_600...1_750, using: &rng)
+                restingKilocalories: Double.random(in: 1_600...1_750, using: &rng),
+                // Sample data is allowed to derive distance from steps, since
+                // there is no phone to ask. Real data never does — see the
+                // note on `distanceMeters`.
+                distanceMeters: Double(steps) * Double.random(in: 0.70...0.80, using: &rng)
             )
         }
         return result

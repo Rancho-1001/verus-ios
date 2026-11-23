@@ -47,6 +47,6 @@ struct Workout: Identifiable, Hashable, Sendable {
 
     /// Miles, since the concept's user is in Michigan and thinks in pounds.
     var miles: Double? {
-        distanceMeters.map { $0 / 1_609.344 }
+        distanceMeters.map { $0 / DailyActivity.metersPerMile }
     }
 }

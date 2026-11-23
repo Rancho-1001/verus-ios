@@ -16,15 +16,72 @@ struct WeightEntry: Identifiable, Hashable, Sendable {
     /// Percent, 0–100. Optional because a scale that reports body fat is not
     /// a given, and the concept treats body fat as a secondary goal.
     let bodyFatPercent: Double?
+    /// Lean mass in kilograms **as the scale measured it**, not as the app
+    /// worked it out. Kept separate from the derived figure in
+    /// `BodyComposition` so the screen can say which one it is showing.
+    let leanKilograms: Double?
+    /// Body mass index, as whatever recorded it calculated it. Stored rather
+    /// than derived because BMI needs a height Verus does not ask for, and a
+    /// smart scale already knows it.
+    let bodyMassIndex: Double?
 
-    init(id: UUID = UUID(), date: Date, kilograms: Double, bodyFatPercent: Double? = nil) {
+    init(
+        id: UUID = UUID(),
+        date: Date,
+        kilograms: Double,
+        bodyFatPercent: Double? = nil,
+        leanKilograms: Double? = nil,
+        bodyMassIndex: Double? = nil
+    ) {
         self.id = id
         self.date = date
         self.kilograms = kilograms
         self.bodyFatPercent = bodyFatPercent
+        self.leanKilograms = leanKilograms
+        self.bodyMassIndex = bodyMassIndex
     }
 
     var pounds: Double { kilograms * Self.poundsPerKilogram }
+
+    /// Fat mass, in kilograms — the part of the scale reading that is fat.
+    var fatKilograms: Double? { bodyFatPercent.map { kilograms * $0 / 100 } }
+
+    /// Lean mass as best known: measured if the scale reported it, otherwise
+    /// derived from weight and body fat. `isLeanMeasured` says which, because
+    /// a measurement and an inference should not be displayed as the same
+    /// kind of fact.
+    var bestLeanKilograms: Double? {
+        leanKilograms
+            ?? bodyFatPercent.flatMap {
+                BodyComposition.leanKilograms(weightKilograms: kilograms, bodyFatPercent: $0)
+            }
+    }
+
+    var isLeanMeasured: Bool { leanKilograms != nil }
+
+    /// True when this weigh-in carries anything beyond the weight itself —
+    /// what tells a smart-scale reading apart from a number typed in.
+    var hasComposition: Bool {
+        bodyFatPercent != nil || leanKilograms != nil || bodyMassIndex != nil
+    }
+
+    /// A copy with any missing composition field filled in. Never overwrites
+    /// a value that is already there: a figure the user typed outranks one
+    /// matched out of Apple Health.
+    func filling(
+        bodyFatPercent fat: Double? = nil,
+        leanKilograms lean: Double? = nil,
+        bodyMassIndex bmi: Double? = nil
+    ) -> WeightEntry {
+        WeightEntry(
+            id: id,
+            date: date,
+            kilograms: kilograms,
+            bodyFatPercent: bodyFatPercent ?? fat,
+            leanKilograms: leanKilograms ?? lean,
+            bodyMassIndex: bodyMassIndex ?? bmi
+        )
+    }
 
     var mass: Measurement<UnitMass> { .init(value: kilograms, unit: .kilograms) }
 
@@ -34,13 +91,17 @@ struct WeightEntry: Identifiable, Hashable, Sendable {
         _ pounds: Double,
         id: UUID = UUID(),
         date: Date,
-        bodyFatPercent: Double? = nil
+        bodyFatPercent: Double? = nil,
+        leanKilograms: Double? = nil,
+        bodyMassIndex: Double? = nil
     ) -> WeightEntry {
         WeightEntry(
             id: id,
             date: date,
             kilograms: pounds / poundsPerKilogram,
-            bodyFatPercent: bodyFatPercent
+            bodyFatPercent: bodyFatPercent,
+            leanKilograms: leanKilograms,
+            bodyMassIndex: bodyMassIndex
         )
     }
 }

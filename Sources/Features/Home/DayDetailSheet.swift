@@ -41,6 +41,9 @@ struct DayDetailSheet: View {
                 if let reading {
                     Section("Movement") {
                         row("Steps", value: reading.steps.formatted(.number.grouping(.automatic)))
+                        if let miles = reading.miles {
+                            row("Distance", value: "\(miles.formatted(.number.precision(.fractionLength(2)))) mi")
+                        }
                         row("Active energy", value: "\(Int(reading.activeKilocalories)) kcal")
                         row("Resting energy", value: "\(Int(reading.restingKilocalories)) kcal")
                         row("Total burned", value: "\(Int(reading.totalKilocalories)) kcal")
@@ -76,6 +79,22 @@ struct DayDetailSheet: View {
                                 entry.date.formatted(.dateTime.hour().minute()),
                                 value: "\(entry.pounds.formatted(.number.precision(.fractionLength(1)))) lb"
                             )
+                            // Everything else the scale sent, indented under
+                            // the weigh-in it belongs to — a smart scale
+                            // writes these as separate records in Health and
+                            // this is where they go back together.
+                            if let fat = entry.bodyFatPercent {
+                                detail("Body fat", value: "\(fat.formatted(.number.precision(.fractionLength(1))))%")
+                            }
+                            if let lean = entry.bestLeanKilograms {
+                                detail(
+                                    entry.isLeanMeasured ? "Lean mass" : "Lean mass (derived)",
+                                    value: "\((lean * WeightEntry.poundsPerKilogram).formatted(.number.precision(.fractionLength(1)))) lb"
+                                )
+                            }
+                            if let bmi = entry.bodyMassIndex {
+                                detail("BMI", value: bmi.formatted(.number.precision(.fractionLength(1))))
+                            }
                         }
                         if let trendPounds {
                             HStack {
@@ -119,5 +138,16 @@ struct DayDetailSheet: View {
             Spacer()
             Text(value).foregroundStyle(.secondary).monospacedDigit()
         }
+    }
+
+    /// A row that belongs to the one above it: smaller, indented, and clearly
+    /// subordinate to the weigh-in it describes.
+    private func detail(_ title: String, value: String) -> some View {
+        HStack {
+            Text(title).font(.caption).foregroundStyle(.secondary)
+            Spacer()
+            Text(value).font(.caption).foregroundStyle(.secondary).monospacedDigit()
+        }
+        .padding(.leading, 14)
     }
 }

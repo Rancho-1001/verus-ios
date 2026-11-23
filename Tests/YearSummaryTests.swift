@@ -114,6 +114,32 @@ struct YearSummaryTests {
         #expect(best.month == 4)  // May, the only one with anything in it
     }
 
+    @Test("miles are summed over the days that reported one")
+    func distance() throws {
+        let days: [Date: DailyActivity] = Dictionary(uniqueKeysWithValues: (1...3).map { day in
+            let d = cal.startOfDay(for: date(2026, 4, day))
+            return (d, DailyActivity(
+                day: d, steps: 12_000, activeKilocalories: 480, restingKilocalories: 1_700,
+                // Three days at a mile and a half each.
+                distanceMeters: day == 2 ? nil : 1.5 * DailyActivity.metersPerMile
+            ))
+        })
+        let summary = ActivityRollup.yearSummary(from: days, goal: goal, year: 2026, calendar: cal)
+        let miles = try #require(summary.miles)
+        // The day with no distance contributes nothing rather than a zero
+        // that drags the total down — and the step count still counts.
+        #expect(abs(miles - 3.0) < 0.001)
+        #expect(summary.daysWithData == 3)
+    }
+
+    @Test("a year with no distance reports none rather than zero miles")
+    func noDistance() {
+        let days = Dictionary(uniqueKeysWithValues: [activity(9_000, 2026, 5, 1)])
+        let summary = ActivityRollup.yearSummary(from: days, goal: goal, year: 2026, calendar: cal)
+        #expect(summary.distanceMeters == 0)
+        #expect(summary.miles == nil)
+    }
+
     @Test("only years with data are offered, newest first")
     func yearsWithData() {
         let days = Dictionary(uniqueKeysWithValues: [

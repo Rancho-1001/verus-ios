@@ -12,6 +12,9 @@ struct YearSummary: Equatable, Sendable {
     let daysWithData: Int
     let daysAtGoal: Int
     let activeKilocalories: Double
+    /// Metres walked and run across the year, summed over the days that
+    /// reported a distance. Zero means no day did.
+    let distanceMeters: Double
 
     /// The single best day, if any day reported.
     let bestDay: (date: Date, steps: Int)?
@@ -41,6 +44,12 @@ struct YearSummary: Equatable, Sendable {
 
     var hasData: Bool { daysWithData > 0 }
 
+    /// Miles for the year, or `nil` when Health reported no distance at all —
+    /// which is a different claim from zero miles.
+    var miles: Double? {
+        distanceMeters > 0 ? distanceMeters / DailyActivity.metersPerMile : nil
+    }
+
     static func == (a: YearSummary, b: YearSummary) -> Bool {
         a.year == b.year
             && a.totalSteps == b.totalSteps
@@ -50,6 +59,7 @@ struct YearSummary: Equatable, Sendable {
             && a.bestDay?.steps == b.bestDay?.steps
             && a.monthlySteps == b.monthlySteps
             && a.monthlyDaysWithData == b.monthlyDaysWithData
+            && a.distanceMeters == b.distanceMeters
     }
 }
 
@@ -68,6 +78,7 @@ extension ActivityRollup {
         var days = 0
         var atGoal = 0
         var energy = 0.0
+        var metres = 0.0
         var best: (date: Date, steps: Int)?
 
         for activity in byDay.values {
@@ -81,6 +92,7 @@ extension ActivityRollup {
             total += activity.steps
             days += 1
             energy += activity.activeKilocalories
+            metres += activity.distanceMeters ?? 0
             if activity.steps >= goal { atGoal += 1 }
             // Ties go to the earlier day: the first time you hit a number is
             // the day worth remembering.
@@ -96,6 +108,7 @@ extension ActivityRollup {
             daysWithData: days,
             daysAtGoal: atGoal,
             activeKilocalories: energy,
+            distanceMeters: metres,
             bestDay: best,
             monthlySteps: monthlySteps,
             monthlyDaysWithData: monthlyDays

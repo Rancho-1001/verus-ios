@@ -49,6 +49,23 @@ final class WeightStore {
     private(set) var healthWriteError: String?
     /// How many weigh-ins the last sync pulled in from other apps.
     private(set) var lastImportCount = 0
+    /// How many weigh-ins the last sync *completed* — already stored, but
+    /// missing the body fat or lean mass that came with them.
+    private(set) var lastEnrichedCount = 0
+    /// Whether a sync has run and what it found, for the Weight screen to
+    /// report rather than leaving the user to guess.
+    private(set) var isSyncing = false
+    private(set) var lastSyncAt: Date?
+
+    /// True while the weigh-ins on screen are the seeded sample set.
+    ///
+    /// This flag is load-bearing. The sample entries exist so the chart means
+    /// something before the first real morning, and the rule is that they are
+    /// **never written to disk** — an earlier version appended a real weigh-in
+    /// to the sample array and saved the lot, which baked six weeks of
+    /// invented mornings into the user's own file. Clearing them the moment
+    /// real data arrives is what makes that impossible rather than unlikely.
+    private(set) var isShowingSampleEntries = false
 
     init(
         fileURL: URL? = WeightStore.defaultFileURL,
@@ -72,49 +89,62 @@ final class WeightStore {
         load()
         if entries.isEmpty && seedWhenEmpty {
             entries = Self.sampleEntries()
+            isShowingSampleEntries = true
         }
+    }
+
+    /// Throws away the sample set the moment real data arrives, so the two
+    /// can never be stored side by side.
+    private func dropSampleEntries() {
+        guard isShowingSampleEntries else { return }
+        entries = []
+        isShowingSampleEntries = false
     }
 
     // MARK: - Apple Health
 
     /// Pulls weigh-ins recorded elsewhere — a smart scale, the Health app
-    /// itself, another tracker — and merges them in.
+    /// itself, another tracker — and merges them in, body composition and
+    /// all.
     ///
-    /// Verus writes its own entries back to Health, so a naive import would
-    /// read them straight back and double every morning. Entries are matched
-    /// on the day plus the weight to a tenth of a kilogram; anything that
-    /// close on the same day is the same weigh-in, whichever app recorded it.
+    /// The merge rules, including why a duplicate is enriched rather than
+    /// skipped, live in `BodyMetrics.merge`. This function's own job is the
+    /// window: a year back by default, which is enough to bring a scale's
+    /// history across on first run without asking HealthKit for everything
+    /// anyone has ever recorded.
     @discardableResult
     func syncFromHealth(since: Date? = nil) async -> Int {
         guard let health else { return 0 }
         let start = since
-            ?? calendar.date(byAdding: .month, value: -6, to: .now)
+            ?? calendar.date(byAdding: .year, value: -1, to: .now)
             ?? .distantPast
+
+        isSyncing = true
+        defer {
+            isSyncing = false
+            lastSyncAt = .now
+        }
 
         guard let imported = try? await health.weightEntries(from: start, to: .now) else {
             return 0
         }
-
-        var known = Set(entries.map(fingerprint))
-        var added = 0
-        for entry in imported where !known.contains(fingerprint(entry)) {
-            known.insert(fingerprint(entry))
-            entries.append(entry)
-            added += 1
+        guard !imported.isEmpty else {
+            lastImportCount = 0
+            lastEnrichedCount = 0
+            return 0
         }
 
-        if added > 0 {
-            entries.sort { $0.date < $1.date }
+        // Real weigh-ins have arrived, so the sample set goes.
+        dropSampleEntries()
+
+        let result = BodyMetrics.merge(existing: entries, imported: imported, calendar: calendar)
+        if result.added > 0 || result.enriched > 0 {
+            entries = result.entries
             save()
         }
-        lastImportCount = added
-        return added
-    }
-
-    /// Same day, same weight to 100 g — the same weigh-in.
-    private func fingerprint(_ entry: WeightEntry) -> String {
-        let day = calendar.startOfDay(for: entry.date).timeIntervalSince1970
-        return "\(Int(day))|\((entry.kilograms * 10).rounded())"
+        lastImportCount = result.added
+        lastEnrichedCount = result.enriched
+        return result.added
     }
 
     // MARK: - Derived
@@ -157,6 +187,22 @@ final class WeightStore {
 
     var latestBodyFatPercent: Double? { latestBodyFatEntry?.bodyFatPercent }
 
+    /// The most recent weigh-in that carried anything beyond the weight —
+    /// what a smart scale produces and a typed number does not.
+    var latestCompositionEntry: WeightEntry? {
+        entries.filter(\.hasComposition).max { $0.date < $1.date }
+    }
+
+    /// Whether any weigh-in has ever arrived with composition attached. The
+    /// Weight screen uses this to decide between showing a composition card
+    /// and saying nothing at all — an empty card would imply the data is
+    /// coming, and for a scale that only reports weight it never is.
+    var hasAnyComposition: Bool { entries.contains(where: \.hasComposition) }
+
+    /// Red, amber or green for the Home tile — read off the same projection
+    /// the Weight screen prints in words, so the two cannot disagree.
+    var standing: GoalStanding { GoalStanding.standing(for: projection) }
+
     /// How the weight goal and the body-fat goal relate at the current
     /// composition. `.noBodyFatRecorded` whenever either is missing.
     var goalRelationship: BodyComposition.GoalRelationship {
@@ -177,6 +223,8 @@ final class WeightStore {
 
     func record(pounds: Double, on date: Date = .now, bodyFatPercent: Double? = nil) {
         let entry = WeightEntry.fromPounds(pounds, date: date, bodyFatPercent: bodyFatPercent)
+        // A real weigh-in and the sample set are never stored together.
+        dropSampleEntries()
         entries.append(entry)
         entries.sort { $0.date < $1.date }
         save()
@@ -200,6 +248,14 @@ final class WeightStore {
         save()
     }
 
+    /// Empties the local store. Apple Health is untouched — it is a separate
+    /// record, and the next sync reads back whatever it holds.
+    func deleteAll() {
+        isShowingSampleEntries = false
+        entries = []
+        save()
+    }
+
     // MARK: - Persistence
 
     static var defaultFileURL: URL? {
@@ -219,7 +275,9 @@ final class WeightStore {
     }
 
     private func save() {
-        guard let fileURL else { return }
+        // The second half of this guard is the one that matters: sample data
+        // must never reach the file. See `isShowingSampleEntries`.
+        guard let fileURL, !isShowingSampleEntries else { return }
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -234,16 +292,30 @@ final class WeightStore {
         let date: Date
         let kilograms: Double
         let bodyFatPercent: Double?
+        /// Added after the first release, so optional on the way in as well
+        /// as out: a file written by the earlier version decodes with these
+        /// absent rather than failing.
+        let leanKilograms: Double?
+        let bodyMassIndex: Double?
 
         init(_ entry: WeightEntry) {
             id = entry.id
             date = entry.date
             kilograms = entry.kilograms
             bodyFatPercent = entry.bodyFatPercent
+            leanKilograms = entry.leanKilograms
+            bodyMassIndex = entry.bodyMassIndex
         }
 
         var entry: WeightEntry {
-            WeightEntry(id: id, date: date, kilograms: kilograms, bodyFatPercent: bodyFatPercent)
+            WeightEntry(
+                id: id,
+                date: date,
+                kilograms: kilograms,
+                bodyFatPercent: bodyFatPercent,
+                leanKilograms: leanKilograms,
+                bodyMassIndex: bodyMassIndex
+            )
         }
     }
 

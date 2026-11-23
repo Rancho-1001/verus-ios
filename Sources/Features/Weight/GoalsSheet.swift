@@ -13,6 +13,7 @@ struct GoalsSheet: View {
     @State private var weightText = ""
     @State private var bodyFatText = ""
     @State private var stepsText = ""
+    @State private var activeText = ""
 
     var body: some View {
         NavigationStack {
@@ -29,8 +30,17 @@ struct GoalsSheet: View {
                     Text("Optional. Leave it empty if you do not measure body fat.")
                 }
 
-                Section("Activity") {
+                Section {
                     field("Steps a day", text: $stepsText, unit: "")
+                    field("Active energy", text: $activeText, unit: "kcal")
+                } header: {
+                    Text("Activity")
+                } footer: {
+                    // Both of these now decide a colour, not just a caption:
+                    // the Home tiles turn red under half the goal, amber on
+                    // the way and green at it. Said here so the numbers are
+                    // understood as the lines they are.
+                    Text("Home colours today against these: red under half, amber on the way, green at the goal.")
                 }
 
                 if let line = relationshipLine {
@@ -97,8 +107,15 @@ struct GoalsSheet: View {
         return (1_000...100_000).contains(value) ? value : nil
     }
 
+    /// Active kilocalories a day. The range is what a person can plausibly
+    /// burn moving; anything outside it is a typo rather than an ambition.
+    private var parsedActive: Int? {
+        guard let value = Int(activeText.trimmingCharacters(in: .whitespaces)) else { return nil }
+        return (50...5_000).contains(value) ? value : nil
+    }
+
     private var isValid: Bool {
-        parsedWeight != nil && parsedSteps != nil && parsedBodyFat != nil
+        parsedWeight != nil && parsedSteps != nil && parsedBodyFat != nil && parsedActive != nil
     }
 
     // MARK: - The relationship
@@ -141,16 +158,19 @@ struct GoalsSheet: View {
         bodyFatText = weight.goalBodyFatPercent
             .map { $0.formatted(.number.precision(.fractionLength(0))) } ?? ""
         stepsText = "\(activity.dailyStepGoal)"
+        activeText = "\(activity.dailyActiveEnergyGoal)"
     }
 
     private func save() {
         guard let pounds = parsedWeight,
               let steps = parsedSteps,
+              let active = parsedActive,
               case .some(let fat) = parsedBodyFat
         else { return }
         weight.goalKilograms = pounds / WeightEntry.poundsPerKilogram
         weight.goalBodyFatPercent = fat
         activity.dailyStepGoal = steps
+        activity.dailyActiveEnergyGoal = active
         dismiss()
     }
 }

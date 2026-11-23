@@ -123,18 +123,28 @@ struct MonthCalendarView: View {
         return isToday ? .accentColor : .primary
     }
 
-    /// Intensity scales with how close the day came to the goal, so a strong
-    /// month is recognisable without reading a single number.
+    /// Red under half the goal, amber on the way, green at it.
+    ///
+    /// This used to be one colour at varying strength, which is honest and
+    /// slow to read — two shades of the same green is a comparison, not a
+    /// glance. Three bands give the month a shape you can see from arm's
+    /// length. The thresholds are not defined here: they are
+    /// `GoalStanding`'s, shared with the year grid and the Home tiles.
     private func fill(steps: Int?, inMonth: Bool, isFuture: Bool) -> Color {
         guard inMonth, !isFuture, let steps else { return .clear }
-        let share = min(Double(steps) / Double(activity.dailyStepGoal), 1.0)
-        return Color.accentColor.opacity(0.06 + share * 0.26)
+        let goal = activity.dailyStepGoal
+        return GoalStanding.standing(value: steps, goal: goal)
+            .fill(share: GoalStanding.share(value: steps, goal: goal))
     }
 
     private func accessibilityLabel(day: MonthGrid.Day, steps: Int?) -> String {
         let date = day.date.formatted(.dateTime.weekday(.wide).day().month(.wide))
         guard let steps else { return "\(date), no step data" }
-        return "\(date), \(steps) steps"
+        // The colour is said out loud as a word, since a wash behind a number
+        // is not available to a screen reader and not reliable for a
+        // colour-blind reader either.
+        let standing = GoalStanding.standing(value: steps, goal: activity.dailyStepGoal)
+        return "\(date), \(steps) steps, \(standing.label)"
     }
 
     /// 8,421 → "8.4k". Four characters is what fits inside a date cell on the

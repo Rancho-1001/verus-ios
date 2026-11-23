@@ -98,9 +98,15 @@ struct YearView: View {
     // MARK: - Totals
 
     private var totals: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             tile(summary.totalSteps.formatted(.number.notation(.compactName)), "total steps")
             tile(HomeView.grouped(summary.averageSteps), "a day")
+            // Only when Health actually reported a distance. A "0 miles" tile
+            // on a year of walking would be a lie about the walking rather
+            // than a statement about the data.
+            if let miles = summary.miles {
+                tile(miles.formatted(.number.precision(.fractionLength(0))), "miles")
+            }
             tile("\(summary.daysAtGoal)", "days at goal")
         }
     }
@@ -178,7 +184,12 @@ struct YearView: View {
 
     private var months: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Every day").font(.headline)
+            HStack(alignment: .firstTextBaseline) {
+                Text("Every day").font(.headline)
+                Spacer()
+            }
+            GoalStandingLegend(stepGoal: activity.dailyStepGoal)
+                .padding(.bottom, 2)
             // One month per row rather than two. Two fitted the year on
             // fewer screens but left each day under 20 points wide, which
             // cannot hold a readable number — and the step count is the
@@ -330,10 +341,12 @@ private struct YearMonth: View {
         }
     }
 
+    /// The same three bands as the month calendar, from the same thresholds.
     private func fill(steps: Int?, shown: Bool) -> Color {
         guard shown else { return .clear }
         guard let steps else { return .primary.opacity(0.05) }
-        let share = min(Double(steps) / Double(activity.dailyStepGoal), 1.0)
-        return Color.accentColor.opacity(0.10 + share * 0.34)
+        let goal = activity.dailyStepGoal
+        return GoalStanding.standing(value: steps, goal: goal)
+            .fill(share: GoalStanding.share(value: steps, goal: goal))
     }
 }

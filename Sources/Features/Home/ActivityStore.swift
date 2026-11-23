@@ -48,7 +48,20 @@ final class ActivityStore {
         didSet { UserDefaults.standard.set(dailyStepGoal, forKey: Self.stepGoalKey) }
     }
 
+    /// Active kilocalories a day to aim at.
+    ///
+    /// This exists because the Home screen colour-codes the Active tile, and
+    /// a colour needs a line to sit either side of. 500 is a starting value
+    /// and editable on the Goals sheet — the alternative, colouring the tile
+    /// against the user's own recent average, would turn a quiet week into a
+    /// green tile and a hard week into a red one, which is the opposite of
+    /// what the colour is for.
+    var dailyActiveEnergyGoal = 500 {
+        didSet { UserDefaults.standard.set(dailyActiveEnergyGoal, forKey: Self.activeEnergyGoalKey) }
+    }
+
     private static let stepGoalKey = "goal.dailySteps"
+    private static let activeEnergyGoalKey = "goal.dailyActiveKilocalories"
 
     var calendar: Calendar
 
@@ -67,6 +80,9 @@ final class ActivityStore {
         self.sample = sample
         if let saved = UserDefaults.standard.object(forKey: Self.stepGoalKey) as? Int, saved > 0 {
             dailyStepGoal = saved
+        }
+        if let saved = UserDefaults.standard.object(forKey: Self.activeEnergyGoalKey) as? Int, saved > 0 {
+            dailyActiveEnergyGoal = saved
         }
         if health == nil { state = .unavailable }
     }
@@ -154,6 +170,16 @@ final class ActivityStore {
             return
         }
 
+        // Someone who granted access to an earlier version has never been
+        // asked about the types added since — distance, body fat, lean mass,
+        // BMI. Those reads would come back empty and look exactly like a
+        // denial, so ask once, here, rather than quietly showing dashes. The
+        // sheet only lists types still undecided; if there are none, this is
+        // a no-op the user never sees.
+        if await health.hasTypesNotYetRequested {
+            try? await health.requestAuthorization()
+        }
+
         do {
             let live = try await health.dailyActivity(from: first, to: last)
             if live.isEmpty {
@@ -238,6 +264,56 @@ final class ActivityStore {
             .filter(\.isInMonth)
             .compactMap { activity(on: $0.date)?.steps }
             .count { $0 >= dailyStepGoal }
+    }
+
+    /// Every step recorded in the month on screen.
+    func totalSteps(in grid: MonthGrid) -> Int {
+        daysInMonth(of: grid).reduce(0) { $0 + $1.steps }
+    }
+
+    /// Miles walked and run across the month, when any day reported a
+    /// distance. `nil` rather than 0, so a month Health has no distance for
+    /// says nothing instead of claiming the user did not move.
+    func totalMiles(in grid: MonthGrid) -> Double? {
+        let metres = daysInMonth(of: grid).compactMap(\.distanceMeters)
+        guard !metres.isEmpty else { return nil }
+        return metres.reduce(0, +) / DailyActivity.metersPerMile
+    }
+
+    func averageActiveKilocalories(in grid: MonthGrid) -> Double? {
+        let values = daysInMonth(of: grid).map(\.activeKilocalories)
+        guard !values.isEmpty else { return nil }
+        return values.reduce(0, +) / Double(values.count)
+    }
+
+    private func daysInMonth(of grid: MonthGrid) -> [DailyActivity] {
+        grid.weeks
+            .flatMap(\.days)
+            .filter(\.isInMonth)
+            .compactMap { activity(on: $0.date) }
+    }
+
+    /// The last `count` days, newest first, including days with no reading —
+    /// the gaps are part of what the list has to show.
+    func recentDays(_ count: Int, asOf today: Date = .now) -> [Date] {
+        let start = calendar.startOfDay(for: today)
+        return (0..<count).compactMap { calendar.date(byAdding: .day, value: -$0, to: start) }
+    }
+
+    // MARK: - Standing
+
+    var todayStepStanding: GoalStanding {
+        GoalStanding.standing(value: today?.steps, goal: dailyStepGoal)
+    }
+
+    var todayActiveStanding: GoalStanding {
+        GoalStanding.standing(
+            value: today?.activeKilocalories, goal: Double(dailyActiveEnergyGoal)
+        )
+    }
+
+    func standing(on day: Date) -> GoalStanding {
+        GoalStanding.standing(value: activity(on: day)?.steps, goal: dailyStepGoal)
     }
 
     func totalSteps(forWeekStarting start: Date) -> Int? {

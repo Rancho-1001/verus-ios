@@ -21,8 +21,10 @@ struct WeightView: View {
                 VStack(alignment: .leading, spacing: 28) {
                     headline
                     chart
+                    composition
                     weighIn
                     weeks
+                    ledger
                 }
                 .padding(20)
             }
@@ -73,8 +75,6 @@ struct WeightView: View {
             projectionLine
                 .font(.subheadline)
                 .padding(.top, 10)
-
-            compositionLine
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -116,26 +116,109 @@ struct WeightView: View {
         }
     }
 
-    /// Body fat and what it means for the two goals together.
+    /// What the scale measured besides the weight.
     ///
-    /// Silent when there is no body-fat reading, rather than showing an empty
-    /// row — this is a screen that has to work for someone whose scale only
-    /// reports weight.
+    /// A connected scale writes body fat, lean mass and BMI to Apple Health
+    /// as separate records taken at the same instant; Verus reads all of them
+    /// and puts them back together, so this card is the one place where one
+    /// step onto the scale is shown as one reading.
+    ///
+    /// Silent when nothing has ever arrived, rather than showing an empty
+    /// card — for a scale that reports weight alone, it never will, and a
+    /// card full of dashes would imply otherwise.
     @ViewBuilder
-    private var compositionLine: some View {
-        if let entry = store.latestBodyFatEntry, let percent = entry.bodyFatPercent {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("\(percent, format: .number.precision(.fractionLength(1)))% body fat · measured \(entry.date, format: .dateTime.day().month())")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+    private var composition: some View {
+        if let entry = store.latestCompositionEntry {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Composition").font(.headline)
+                    Spacer()
+                    Text(entry.date, format: .dateTime.day().month())
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                HStack(spacing: 10) {
+                    if let fat = entry.bodyFatPercent {
+                        compositionTile(
+                            "\(fat.formatted(.number.precision(.fractionLength(1))))%", "body fat"
+                        )
+                    }
+                    if let fatMass = entry.fatKilograms {
+                        compositionTile(pounds(fatMass), "lb fat")
+                    }
+                    if let lean = entry.bestLeanKilograms {
+                        compositionTile(
+                            pounds(lean),
+                            entry.isLeanMeasured ? "lb lean" : "lb lean, derived"
+                        )
+                    }
+                    if let bmi = entry.bodyMassIndex {
+                        compositionTile(bmi.formatted(.number.precision(.fractionLength(1))), "BMI")
+                    }
+                }
+
                 if let relationship = goalRelationshipText {
                     Text(relationship)
                         .font(.caption)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .padding(.top, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .background(.background, in: .rect(cornerRadius: 16))
+        }
+    }
+
+    private func compositionTile(_ value: String, _ label: String) -> some View {
+        VStack(spacing: 3) {
+            Text(value)
+                .font(.system(size: 19, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            Text(label)
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 11)
+        .background(Color(.systemGroupedBackground), in: .rect(cornerRadius: 12))
+    }
+
+    private func pounds(_ kilograms: Double) -> String {
+        (kilograms * WeightEntry.poundsPerKilogram)
+            .formatted(.number.precision(.fractionLength(1)))
+    }
+
+    /// The way in to every weigh-in, and the only place they can be deleted.
+    private var ledger: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            NavigationLink {
+                WeighInListView(store: store)
+            } label: {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("All weigh-ins").font(.subheadline.weight(.medium))
+                        Text(store.isShowingSampleEntries
+                             ? "Sample data — the first real weigh-in replaces it"
+                             : "\(store.entries.count) recorded")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(14)
+                .background(.background, in: .rect(cornerRadius: 16))
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
         }
     }
 

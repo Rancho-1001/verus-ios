@@ -12,6 +12,7 @@ struct HomeView: View {
 
     @State private var monthAnchor: Date = .now
     @State private var selectedDay: Date?
+    @State private var expandedMetric: TodayMetric?
 
     private var calendar: Calendar { activity.calendar }
 
@@ -37,8 +38,16 @@ struct HomeView: View {
             .background(Color(.systemGroupedBackground))
             .navigationTitle("Verus")
             .task(id: grid.month) { await activity.load(grid: grid) }
+            // The weigh-ins a smart scale wrote to Apple Health are pulled in
+            // here, on the first screen, rather than waiting for the Weight
+            // tab to be opened: the trend on this screen and the week column
+            // in the calendar are both built from them.
+            .task { await weight.syncFromHealth() }
             .sheet(item: $selectedDay) { day in
                 DayDetailSheet(day: day, activity: activity, weight: weight, food: food)
+            }
+            .sheet(item: $expandedMetric) { metric in
+                TodayMetricSheet(metric: metric, activity: activity, weight: weight, grid: grid)
             }
         }
     }
@@ -130,24 +139,127 @@ struct HomeView: View {
 
     private var today: some View {
         HStack(spacing: 10) {
-            metric(
-                "Steps",
-                value: activity.today.map { Self.grouped($0.steps) } ?? "—",
-                caption: goalCaption,
-                systemImage: "figure.walk"
+            ForEach(TodayMetric.allCases) { metric in
+                Button { expandedMetric = metric } label: {
+                    tile(metric)
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Opens today's \(metric.title.lowercased()) in full")
+            }
+        }
+    }
+
+    /// One of today's three numbers.
+    ///
+    /// Two things changed here after the app had been used for a few days.
+    /// They were not tappable — three cards that look exactly like the ones
+    /// elsewhere in the app that do open, which is its own kind of lie — and
+    /// they were colourless, so the number told you where you stood only
+    /// after you had remembered the goal and done the arithmetic. Now the
+    /// value carries its band's colour and the whole card is a button.
+    private func tile(_ metric: TodayMetric) -> some View {
+        let standing = standing(for: metric)
+        return VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 3) {
+                Label(metric.title, systemImage: metric.symbol)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .labelStyle(.titleAndIcon)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(.tertiary)
+            }
+            Text(value(for: metric))
+                .font(.system(size: 22, weight: .semibold, design: .rounded))
+                .foregroundStyle(standing.valueColor)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            Text(caption(for: metric))
+                .font(.system(size: 10))
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            progressBar(standing: standing, share: share(for: metric))
+                .padding(.top, 3)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 12)
+        .padding(.horizontal, 13)
+        .background {
+            RoundedRectangle(cornerRadius: 14)
+                .fill(.background)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14).fill(standing.tileTint)
+                }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            "\(metric.title), \(value(for: metric)), \(caption(for: metric)), \(standing.label)"
+        )
+    }
+
+    /// A 3-point rule under each tile. `nil` leaves the track invisible but
+    /// still laid out, so the three cards keep the same height — weight has
+    /// no "share of today's goal" to draw, and inventing one would be the
+    /// kind of flattery this app is built to avoid.
+    @ViewBuilder
+    private func progressBar(standing: GoalStanding, share: Double?) -> some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule().fill(share == nil ? .clear : Color.primary.opacity(0.07))
+                if let share {
+                    Capsule()
+                        .fill(standing.color.opacity(0.75))
+                        .frame(width: max(proxy.size.width * share, share > 0 ? 3 : 0))
+                }
+            }
+        }
+        .frame(height: 3)
+    }
+
+    // MARK: - What each tile says
+
+    private func standing(for metric: TodayMetric) -> GoalStanding {
+        switch metric {
+        case .steps: activity.todayStepStanding
+        case .active: activity.todayActiveStanding
+        case .weight: weight.standing
+        }
+    }
+
+    private func value(for metric: TodayMetric) -> String {
+        switch metric {
+        case .steps:
+            activity.today.map { Self.grouped($0.steps) } ?? "—"
+        case .active:
+            activity.today.map { "\(Int($0.activeKilocalories))" } ?? "—"
+        case .weight:
+            weight.trendPounds.map { $0.formatted(.number.precision(.fractionLength(1))) } ?? "—"
+        }
+    }
+
+    private func caption(for metric: TodayMetric) -> String {
+        switch metric {
+        case .steps: stepsCaption
+        case .active: activeCaption
+        case .weight: trendCaption
+        }
+    }
+
+    private func share(for metric: TodayMetric) -> Double? {
+        switch metric {
+        case .steps:
+            GoalStanding.share(value: activity.today?.steps, goal: activity.dailyStepGoal)
+        case .active:
+            GoalStanding.share(
+                value: activity.today?.activeKilocalories,
+                goal: Double(activity.dailyActiveEnergyGoal)
             )
-            metric(
-                "Active",
-                value: activity.today.map { "\(Int($0.activeKilocalories))" } ?? "—",
-                caption: "kcal burned",
-                systemImage: "flame"
-            )
-            metric(
-                "Weight",
-                value: weight.trendPounds.map { $0.formatted(.number.precision(.fractionLength(1))) } ?? "—",
-                caption: trendCaption,
-                systemImage: "scalemass"
-            )
+        case .weight:
+            nil
         }
     }
 
@@ -161,35 +273,25 @@ struct HomeView: View {
         return "trend · today \(latest.pounds.formatted(.number.precision(.fractionLength(1))))"
     }
 
-    private var goalCaption: String {
-        guard let steps = activity.today?.steps else { return "no data yet" }
-        let remaining = activity.dailyStepGoal - steps
-        return remaining > 0
-            ? "\(Self.grouped(remaining)) to goal"
-            : "goal met"
+    /// Distance first when the phone reported one, then the gap to the goal.
+    ///
+    /// The miles are the phone's own measurement, not steps multiplied by an
+    /// assumed stride — which is why a day can have steps and no distance,
+    /// and why this line shrinks to the goal alone when it does.
+    private var stepsCaption: String {
+        guard let today = activity.today else { return "no data yet" }
+        let remaining = activity.dailyStepGoal - today.steps
+        let goalPart = remaining > 0 ? "\(Self.grouped(remaining)) to goal" : "goal met"
+        guard let miles = today.miles else { return goalPart }
+        return "\(miles.formatted(.number.precision(.fractionLength(1)))) mi · \(goalPart)"
     }
 
-    private func metric(_ title: String, value: String, caption: String, systemImage: String) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Label(title, systemImage: systemImage)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .labelStyle(.titleAndIcon)
-            Text(value)
-                .font(.system(size: 22, weight: .semibold, design: .rounded))
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-            Text(caption)
-                .font(.system(size: 10))
-                .foregroundStyle(.tertiary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 12)
-        .padding(.horizontal, 13)
-        .background(.background, in: .rect(cornerRadius: 14))
+    private var activeCaption: String {
+        guard let today = activity.today else { return "no data yet" }
+        let remaining = Double(activity.dailyActiveEnergyGoal) - today.activeKilocalories
+        return remaining > 0
+            ? "\(Int(remaining.rounded())) kcal to goal"
+            : "goal met · \(Int(today.totalKilocalories)) total"
     }
 
     // MARK: - Calendar
@@ -231,6 +333,11 @@ struct HomeView: View {
                 weeklyAverages: weeklyAverages,
                 onSelect: { selectedDay = $0 }
             )
+
+            // The key sits under the grid it explains. Without it the three
+            // colours are a guess about where the lines fall, and "halfway"
+            // depends on a goal the user set themselves.
+            GoalStandingLegend(stepGoal: activity.dailyStepGoal)
         }
         .padding(16)
         .background(.background, in: .rect(cornerRadius: 18))
@@ -275,11 +382,20 @@ struct HomeView: View {
     // MARK: - Month summary
 
     private var monthSummary: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             summaryTile(
                 value: activity.averageSteps(in: grid).map(Self.grouped) ?? "—",
                 label: "avg steps/day"
             )
+            // Shown only when Health reported a distance for the month. A
+            // zero here would read as "you walked nowhere" rather than "the
+            // phone recorded no distance".
+            if let miles = activity.totalMiles(in: grid) {
+                summaryTile(
+                    value: miles.formatted(.number.precision(.fractionLength(0))),
+                    label: "miles"
+                )
+            }
             summaryTile(
                 value: "\(activity.daysAtGoal(in: grid))",
                 label: "days at goal"

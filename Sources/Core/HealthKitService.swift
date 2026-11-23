@@ -34,14 +34,30 @@ final class HealthKitService: @unchecked Sendable {
     // MARK: - Types
 
     private static let stepType = HKQuantityType(.stepCount)
+    private static let distanceType = HKQuantityType(.distanceWalkingRunning)
     private static let activeEnergyType = HKQuantityType(.activeEnergyBurned)
     private static let restingEnergyType = HKQuantityType(.basalEnergyBurned)
     private static let bodyMassType = HKQuantityType(.bodyMass)
     private static let bodyFatType = HKQuantityType(.bodyFatPercentage)
+    private static let leanMassType = HKQuantityType(.leanBodyMass)
+    private static let bodyMassIndexType = HKQuantityType(.bodyMassIndex)
+
+    /// What a connected scale writes, beyond the weight itself.
+    ///
+    /// These four are the whole of what HealthKit models of body
+    /// composition. A scale's own app may also show body water, bone mass,
+    /// visceral fat or a "metabolic age"; Apple Health has no type for any of
+    /// them, so they never reach Verus and Verus does not pretend to have
+    /// them.
+    private static var bodyCompositionTypes: [HKQuantityType] {
+        [bodyMassType, bodyFatType, leanMassType, bodyMassIndexType]
+    }
 
     private static var readTypes: Set<HKObjectType> {
-        [stepType, activeEnergyType, restingEnergyType, bodyMassType, bodyFatType,
-         HKObjectType.workoutType()]
+        Set(bodyCompositionTypes as [HKObjectType]).union([
+            stepType, distanceType, activeEnergyType, restingEnergyType,
+            HKObjectType.workoutType(),
+        ])
     }
 
     /// Only weight is written back. Verus does not invent steps or energy, so
@@ -79,6 +95,28 @@ final class HealthKitService: @unchecked Sendable {
     var hasRequestedAuthorization: Bool {
         guard Self.isAvailable else { return false }
         return store.authorizationStatus(for: Self.bodyMassType) != .notDetermined
+    }
+
+    /// Whether asking again would actually show the user something.
+    ///
+    /// This matters every time a version adds a read type. Someone who
+    /// granted steps, energy and weight months ago has never been asked about
+    /// distance or body fat, and those reads would quietly return nothing —
+    /// the same silence a denial produces, since HealthKit does not
+    /// distinguish them. `getRequestStatusForAuthorization` is the one honest
+    /// answer available here: it reports whether any requested type is still
+    /// undecided, without revealing what was decided.
+    var hasTypesNotYetRequested: Bool {
+        get async {
+            guard Self.isAvailable else { return false }
+            return await withCheckedContinuation { continuation in
+                store.getRequestStatusForAuthorization(
+                    toShare: Self.writeTypes, read: Self.readTypes
+                ) { status, _ in
+                    continuation.resume(returning: status == .shouldRequest)
+                }
+            }
+        }
     }
 
     // MARK: - Daily totals
@@ -133,16 +171,65 @@ final class HealthKitService: @unchecked Sendable {
 
     // MARK: - Weight
 
-    /// Every weigh-in Health knows about in the range, newest last.
+    /// Every weigh-in Health knows about in the range, newest last — with
+    /// whatever body composition was recorded alongside it.
+    ///
+    /// A connected scale writes weight, body fat, lean mass and BMI as four
+    /// separate samples taken at the same instant. All four are read here and
+    /// stitched back together by `BodyMetrics`, so one step onto the scale
+    /// arrives in Verus as one weigh-in rather than as four unrelated
+    /// numbers.
     func weightEntries(from start: Date, to end: Date) async throws -> [WeightEntry] {
         guard Self.isAvailable else { throw HealthKitError.unavailable }
 
+        async let weights = quantitySamples(
+            of: Self.bodyMassType, unit: .gramUnit(with: .kilo), from: start, to: end
+        )
+        // Body fat comes out of HealthKit as a fraction — 0.182, not 18.2 —
+        // and the whole app reads it as a percentage. The conversion happens
+        // here, at the boundary, and nowhere else.
+        async let bodyFat = quantitySamples(
+            of: Self.bodyFatType, unit: .percent(), from: start, to: end
+        )
+        async let lean = quantitySamples(
+            of: Self.leanMassType, unit: .gramUnit(with: .kilo), from: start, to: end
+        )
+        async let bmi = quantitySamples(
+            of: Self.bodyMassIndexType, unit: .count(), from: start, to: end
+        )
+
+        let (weightSamples, fatSamples, leanSamples, bmiSamples) =
+            try await (weights, bodyFat, lean, bmi)
+
+        let entries = weightSamples.map {
+            WeightEntry(date: $0.date, kilograms: $0.value)
+        }
+
+        return BodyMetrics.enrich(
+            entries,
+            bodyFatPercent: fatSamples.map { BodyMetricSample(date: $0.date, value: $0.value * 100) },
+            leanKilograms: leanSamples,
+            bodyMassIndex: bmiSamples
+        )
+    }
+
+    /// Individual samples of one quantity type, oldest first.
+    ///
+    /// Unlike `dailySums` this does not bucket by day: a weigh-in is an
+    /// instant, and the instant is what ties it to the body-fat reading taken
+    /// with it.
+    private func quantitySamples(
+        of type: HKQuantityType,
+        unit: HKUnit,
+        from start: Date,
+        to end: Date
+    ) async throws -> [BodyMetricSample] {
         let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: .strictStartDate)
         let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
 
         return try await withCheckedThrowingContinuation { continuation in
             let query = HKSampleQuery(
-                sampleType: Self.bodyMassType,
+                sampleType: type,
                 predicate: predicate,
                 limit: HKObjectQueryNoLimit,
                 sortDescriptors: [sort]
@@ -151,13 +238,10 @@ final class HealthKitService: @unchecked Sendable {
                     continuation.resume(throwing: HealthKitError.queryFailed(error.localizedDescription))
                     return
                 }
-                let entries = (samples as? [HKQuantitySample] ?? []).map { sample in
-                    WeightEntry(
-                        date: sample.startDate,
-                        kilograms: sample.quantity.doubleValue(for: .gramUnit(with: .kilo))
-                    )
+                let values = (samples as? [HKQuantitySample] ?? []).map {
+                    BodyMetricSample(date: $0.startDate, value: $0.quantity.doubleValue(for: unit))
                 }
-                continuation.resume(returning: entries)
+                continuation.resume(returning: values)
             }
             store.execute(query)
         }
@@ -279,19 +363,22 @@ extension HealthKitService: ActivitySource {
     func dailyActivity(from start: Date, to end: Date) async throws -> [Date: DailyActivity] {
         guard Self.isAvailable else { throw HealthKitError.unavailable }
 
-        // Three independent queries, run together rather than in sequence —
-        // a month of three types is three round trips, and they do not depend
+        // Four independent queries, run together rather than in sequence —
+        // a month of four types is four round trips, and they do not depend
         // on each other.
         async let steps = dailySums(of: Self.stepType, unit: .count(), from: start, to: end)
+        async let distance = dailySums(of: Self.distanceType, unit: .meter(), from: start, to: end)
         async let active = dailySums(of: Self.activeEnergyType, unit: .kilocalorie(), from: start, to: end)
         async let resting = dailySums(of: Self.restingEnergyType, unit: .kilocalorie(), from: start, to: end)
 
-        let (stepsByDay, activeByDay, restingByDay) = try await (steps, active, resting)
+        let (stepsByDay, distanceByDay, activeByDay, restingByDay) =
+            try await (steps, distance, active, resting)
 
-        // A day counts as known if *any* of the three reported. Energy without
+        // A day counts as known if *any* of them reported. Energy without
         // steps is a real state — a swim, a cycle — and dropping those days
         // would blank out exactly the days someone trained hardest.
         let days = Set(stepsByDay.keys)
+            .union(distanceByDay.keys)
             .union(activeByDay.keys)
             .union(restingByDay.keys)
 
@@ -300,7 +387,8 @@ extension HealthKitService: ActivitySource {
                 day: day,
                 steps: Int((stepsByDay[day] ?? 0).rounded()),
                 activeKilocalories: activeByDay[day] ?? 0,
-                restingKilocalories: restingByDay[day] ?? 0
+                restingKilocalories: restingByDay[day] ?? 0,
+                distanceMeters: distanceByDay[day]
             ))
         })
     }
