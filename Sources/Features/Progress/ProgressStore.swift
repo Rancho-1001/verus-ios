@@ -36,11 +36,68 @@ final class ProgressStore {
 
     private let root: URL?
     private var thumbnails: [String: UIImage] = [:]
+    private let health: HealthKitService?
 
-    init(root: URL? = ProgressStore.defaultRoot) {
+    /// How many waist measurements the last sync brought across.
+    private(set) var lastWaistImportCount = 0
+
+    init(
+        root: URL? = ProgressStore.defaultRoot,
+        health: HealthKitService? = HealthKitService.isAvailable ? HealthKitService() : nil
+    ) {
         self.root = root
+        self.health = health
         createDirectories()
         load()
+    }
+
+    // MARK: - Apple Health
+
+    /// Pulls waist measurements recorded elsewhere — a smart tape, the Health
+    /// app, a scale that estimates it — into the tape measurements this
+    /// screen already keeps.
+    ///
+    /// Only the waist. Health has no type for a chest or a thigh, so those
+    /// stay hand-entered, and nothing here pretends otherwise. Matching is
+    /// the same shape as the weigh-in rule: same day and the same figure to a
+    /// millimetre is the same measurement, whichever app wrote it.
+    @discardableResult
+    func syncWaistFromHealth(since: Date? = nil) async -> Int {
+        guard let health else { return 0 }
+        let start = since
+            ?? calendar.date(byAdding: .year, value: -1, to: .now)
+            ?? .distantPast
+        guard let samples = try? await health.waistSamples(from: start, to: .now),
+              !samples.isEmpty
+        else {
+            lastWaistImportCount = 0
+            return 0
+        }
+
+        var known = Set(measurements.filter { $0.site == .waist }.map(waistFingerprint))
+        var added = 0
+        for sample in samples {
+            let measurement = BodyMeasurement(
+                date: sample.date, site: .waist, centimetres: sample.value
+            )
+            let key = waistFingerprint(measurement)
+            guard !known.contains(key) else { continue }
+            known.insert(key)
+            measurements.append(measurement)
+            added += 1
+        }
+
+        if added > 0 {
+            measurements.sort { $0.date < $1.date }
+            save()
+        }
+        lastWaistImportCount = added
+        return added
+    }
+
+    private func waistFingerprint(_ measurement: BodyMeasurement) -> String {
+        let day = calendar.startOfDay(for: measurement.date).timeIntervalSince1970
+        return "\(Int(day))|\((measurement.centimetres * 10).rounded())"
     }
 
     // MARK: - Locations

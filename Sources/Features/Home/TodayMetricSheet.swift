@@ -87,6 +87,9 @@ struct TodayMetricSheet: View {
                     // distance, and the reason is worth one line.
                     row("Distance", "not recorded")
                 }
+                if let flights = today.flightsClimbed {
+                    row("Flights climbed", "\(flights)")
+                }
                 row("Goal", goal.formatted(.number.grouping(.automatic)))
             } else {
                 Text("Apple Health has nothing for today yet.")
@@ -156,6 +159,9 @@ struct TodayMetricSheet: View {
         Section {
             if let today {
                 row("Active", "\(Int(today.activeKilocalories)) kcal")
+                if let minutes = today.exerciseMinutes {
+                    row("Exercise", "\(Int(minutes.rounded())) min")
+                }
                 row("Resting", "\(Int(today.restingKilocalories)) kcal")
                 row("Total burned", "\(Int(today.totalKilocalories)) kcal")
             } else {
@@ -167,6 +173,28 @@ struct TodayMetricSheet: View {
             Text("Today")
         } footer: {
             Text("Resting energy is what the body spends existing — Health estimates it, and the Food screen counts intake against the total rather than against active alone.")
+        }
+
+        // Rest sits on the Active sheet because it is the other half of the
+        // same question: what was spent, and what was recovered. Drawn only
+        // when something arrived — an empty "Rest" card would imply Health
+        // is holding data back when it simply has none.
+        if let today, today.hasRestData {
+            Section {
+                if let hours = today.sleepHours {
+                    row("Asleep last night", DayDetailSheet.hoursText(hours))
+                }
+                if let heartRate = today.restingHeartRate {
+                    row("Resting heart rate", "\(Int(heartRate.rounded())) bpm")
+                }
+                if let hrv = today.heartRateVariabilityMilliseconds {
+                    row("Heart rate variability", "\(Int(hrv.rounded())) ms")
+                }
+            } header: {
+                Text("Rest")
+            } footer: {
+                Text("Health records resting heart rate once or twice a day, so a busy day can show none. Nothing here is a verdict — they are readings, not scores.")
+            }
         }
 
         if !todaysWorkouts.isEmpty {
@@ -254,9 +282,7 @@ struct TodayMetricSheet: View {
                 // Deliberately does not name a source. Verus cannot tell a
                 // figure a smart scale wrote from one typed in on the Weight
                 // screen, so it does not claim to.
-                Text(latest.hasComposition
-                     ? "Composition recorded with this weigh-in."
-                     : "This weigh-in carried weight only. A scale that writes body fat to Apple Health will show it here.")
+                Text(compositionFooter(for: latest))
             }
         }
 
@@ -291,6 +317,16 @@ struct TodayMetricSheet: View {
         }
     }
 
+    private func compositionFooter(for entry: WeightEntry) -> String {
+        if entry.hasComposition {
+            return "Composition recorded with this weigh-in."
+        }
+        if weight.heightMeters != nil {
+            return "This weigh-in carried weight only — the BMI is worked out from the height in Apple Health. A scale that writes body fat there will show it here too."
+        }
+        return "This weigh-in carried weight only. A scale that writes body fat to Apple Health will show it here."
+    }
+
     @ViewBuilder
     private func compositionRows(for entry: WeightEntry) -> some View {
         if let fat = entry.bodyFatPercent {
@@ -308,8 +344,13 @@ struct TodayMetricSheet: View {
                 "\((lean * WeightEntry.poundsPerKilogram).formatted(.number.precision(.fractionLength(1)))) lb"
             )
         }
-        if let bmi = entry.bodyMassIndex {
-            row("BMI", bmi.formatted(.number.precision(.fractionLength(1))))
+        if let bmi = weight.bodyMassIndex(for: entry) {
+            // Labelled when Verus worked it out from the height on file
+            // rather than taking the scale's word for it.
+            row(
+                bmi.isMeasured ? "BMI" : "BMI (from your height)",
+                bmi.value.formatted(.number.precision(.fractionLength(1)))
+            )
         }
     }
 

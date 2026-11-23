@@ -126,9 +126,16 @@ struct WeightView: View {
     /// Silent when nothing has ever arrived, rather than showing an empty
     /// card — for a scale that reports weight alone, it never will, and a
     /// card full of dashes would imply otherwise.
+    /// The weigh-in the card describes: the last one that carried
+    /// composition, or simply the last one when a height is on file and a
+    /// BMI can be worked out from it.
+    private var compositionEntry: WeightEntry? {
+        store.latestCompositionEntry ?? (store.heightMeters != nil ? store.latestEntry : nil)
+    }
+
     @ViewBuilder
     private var composition: some View {
-        if let entry = store.latestCompositionEntry {
+        if let entry = compositionEntry {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .firstTextBaseline) {
                     Text("Composition").font(.headline)
@@ -153,8 +160,11 @@ struct WeightView: View {
                             entry.isLeanMeasured ? "lb lean" : "lb lean, derived"
                         )
                     }
-                    if let bmi = entry.bodyMassIndex {
-                        compositionTile(bmi.formatted(.number.precision(.fractionLength(1))), "BMI")
+                    if let bmi = store.bodyMassIndex(for: entry) {
+                        compositionTile(
+                            bmi.value.formatted(.number.precision(.fractionLength(1))),
+                            bmi.isMeasured ? "BMI" : "BMI, your height"
+                        )
                     }
                 }
 

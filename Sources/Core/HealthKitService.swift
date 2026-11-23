@@ -37,6 +37,13 @@ final class HealthKitService: @unchecked Sendable {
     private static let distanceType = HKQuantityType(.distanceWalkingRunning)
     private static let activeEnergyType = HKQuantityType(.activeEnergyBurned)
     private static let restingEnergyType = HKQuantityType(.basalEnergyBurned)
+    private static let exerciseTimeType = HKQuantityType(.appleExerciseTime)
+    private static let flightsType = HKQuantityType(.flightsClimbed)
+    private static let restingHeartRateType = HKQuantityType(.restingHeartRate)
+    private static let hrvType = HKQuantityType(.heartRateVariabilitySDNN)
+    private static let heightType = HKQuantityType(.height)
+    private static let waistType = HKQuantityType(.waistCircumference)
+    private static let sleepType = HKCategoryType(.sleepAnalysis)
     private static let bodyMassType = HKQuantityType(.bodyMass)
     private static let bodyFatType = HKQuantityType(.bodyFatPercentage)
     private static let leanMassType = HKQuantityType(.leanBodyMass)
@@ -53,9 +60,25 @@ final class HealthKitService: @unchecked Sendable {
         [bodyMassType, bodyFatType, leanMassType, bodyMassIndexType]
     }
 
+    /// Everything Verus asks to read.
+    ///
+    /// The list is deliberately not "everything HealthKit has". There is no
+    /// wildcard in HealthKit anyway — the types must be named — but the rule
+    /// applied here is stricter than the API's: **a type is requested only if
+    /// something on a screen shows it.** A permission sheet of a hundred and
+    /// seventy toggles is how an app gets Don't Allow tapped, and reading
+    /// data that lands nowhere is asking for something for no reason.
+    ///
+    /// So: movement and energy for the calendar and the Activity screen;
+    /// body composition for the Weight screen; height for a BMI the app can
+    /// work out itself; waist for the Progress screen's measurements; resting
+    /// heart rate, HRV and sleep for the rest figures on a day's detail.
     private static var readTypes: Set<HKObjectType> {
         Set(bodyCompositionTypes as [HKObjectType]).union([
             stepType, distanceType, activeEnergyType, restingEnergyType,
+            exerciseTimeType, flightsType,
+            restingHeartRateType, hrvType, sleepType,
+            heightType, waistType,
             HKObjectType.workoutType(),
         ])
     }
@@ -167,6 +190,115 @@ final class HealthKitService: @unchecked Sendable {
 
             store.execute(query)
         }
+    }
+
+    /// Daily averages for a quantity Health records as readings rather than
+    /// as a running total.
+    ///
+    /// Steps add up; a heart rate does not. Summing six resting heart rate
+    /// samples would report a pulse of 350, so these go through
+    /// `.discreteAverage` and days with no reading stay absent.
+    private func dailyAverages(
+        of type: HKQuantityType,
+        unit: HKUnit,
+        from start: Date,
+        to end: Date
+    ) async throws -> [Date: Double] {
+        let anchor = calendar.startOfDay(for: start)
+        let endOfRange = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: end)) ?? end
+        let predicate = HKQuery.predicateForSamples(
+            withStart: anchor, end: endOfRange, options: .strictStartDate
+        )
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKStatisticsCollectionQuery(
+                quantityType: type,
+                quantitySamplePredicate: predicate,
+                options: .discreteAverage,
+                anchorDate: anchor,
+                intervalComponents: DateComponents(day: 1)
+            )
+
+            query.initialResultsHandler = { [calendar] _, results, error in
+                if let error {
+                    continuation.resume(throwing: HealthKitError.queryFailed(error.localizedDescription))
+                    return
+                }
+                guard let results else {
+                    continuation.resume(returning: [:])
+                    return
+                }
+                var values: [Date: Double] = [:]
+                results.enumerateStatistics(from: anchor, to: endOfRange) { statistics, _ in
+                    guard let average = statistics.averageQuantity() else { return }
+                    values[calendar.startOfDay(for: statistics.startDate)] = average.doubleValue(for: unit)
+                }
+                continuation.resume(returning: values)
+            }
+
+            store.execute(query)
+        }
+    }
+
+    // MARK: - Sleep
+
+    /// Hours asleep, keyed by the morning each night ended on.
+    ///
+    /// Only the asleep values count: `inBed` is time spent lying there, which
+    /// is a different claim and one the user did not make. Overlapping
+    /// records from several sources are merged rather than added — see
+    /// `SleepRollup`.
+    private func sleepHours(from start: Date, to end: Date) async throws -> [Date: Double] {
+        // A night that ends inside the range may have begun before it, so the
+        // window reaches back a day.
+        let windowStart = calendar.date(byAdding: .day, value: -1, to: start) ?? start
+        let predicate = HKQuery.predicateForSamples(
+            withStart: windowStart, end: end, options: []
+        )
+        let asleep = Set(HKCategoryValueSleepAnalysis.allAsleepValues.map(\.rawValue))
+
+        let sessions: [SleepSession] = try await withCheckedThrowingContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: Self.sleepType,
+                predicate: predicate,
+                limit: HKObjectQueryNoLimit,
+                sortDescriptors: [NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)]
+            ) { _, samples, error in
+                if let error {
+                    continuation.resume(throwing: HealthKitError.queryFailed(error.localizedDescription))
+                    return
+                }
+                let stretches = (samples as? [HKCategorySample] ?? [])
+                    .filter { asleep.contains($0.value) }
+                    .map { SleepSession(start: $0.startDate, end: $0.endDate) }
+                continuation.resume(returning: stretches)
+            }
+            store.execute(query)
+        }
+
+        return SleepRollup.hoursByNight(sessions, calendar: calendar)
+    }
+
+    // MARK: - Body measurements
+
+    /// The most recent height on file, in metres — what lets Verus work out a
+    /// BMI for a scale that does not send one.
+    func latestHeightMeters() async throws -> Double? {
+        guard Self.isAvailable else { throw HealthKitError.unavailable }
+        let samples = try await quantitySamples(
+            of: Self.heightType, unit: .meter(),
+            from: .distantPast, to: .now
+        )
+        return samples.last?.value
+    }
+
+    /// Waist measurements in centimetres, for the Progress screen's tape
+    /// measurements — which are stored in centimetres for the same reason.
+    func waistSamples(from start: Date, to end: Date) async throws -> [BodyMetricSample] {
+        guard Self.isAvailable else { throw HealthKitError.unavailable }
+        return try await quantitySamples(
+            of: Self.waistType, unit: .meterUnit(with: .centi), from: start, to: end
+        )
     }
 
     // MARK: - Weight
@@ -370,17 +502,35 @@ extension HealthKitService: ActivitySource {
         async let distance = dailySums(of: Self.distanceType, unit: .meter(), from: start, to: end)
         async let active = dailySums(of: Self.activeEnergyType, unit: .kilocalorie(), from: start, to: end)
         async let resting = dailySums(of: Self.restingEnergyType, unit: .kilocalorie(), from: start, to: end)
+        async let exercise = dailySums(of: Self.exerciseTimeType, unit: .minute(), from: start, to: end)
+        async let flights = dailySums(of: Self.flightsType, unit: .count(), from: start, to: end)
+        // Averaged, not summed — see `dailyAverages`.
+        async let heartRate = dailyAverages(
+            of: Self.restingHeartRateType, unit: .count().unitDivided(by: .minute()),
+            from: start, to: end
+        )
+        async let hrv = dailyAverages(
+            of: Self.hrvType, unit: .secondUnit(with: .milli), from: start, to: end
+        )
+        async let sleep = sleepHours(from: start, to: end)
 
         let (stepsByDay, distanceByDay, activeByDay, restingByDay) =
             try await (steps, distance, active, resting)
+        let (exerciseByDay, flightsByDay, heartRateByDay, hrvByDay, sleepByDay) =
+            try await (exercise, flights, heartRate, hrv, sleep)
 
         // A day counts as known if *any* of them reported. Energy without
         // steps is a real state — a swim, a cycle — and dropping those days
-        // would blank out exactly the days someone trained hardest.
+        // would blank out exactly the days someone trained hardest. Sleep and
+        // heart rate are deliberately **not** in this union: a night's sleep
+        // does not make a day of movement exist, and letting it would draw
+        // calendar cells for days the phone recorded nothing else about.
         let days = Set(stepsByDay.keys)
             .union(distanceByDay.keys)
             .union(activeByDay.keys)
             .union(restingByDay.keys)
+            .union(exerciseByDay.keys)
+            .union(flightsByDay.keys)
 
         return Dictionary(uniqueKeysWithValues: days.map { day in
             (day, DailyActivity(
@@ -388,7 +538,12 @@ extension HealthKitService: ActivitySource {
                 steps: Int((stepsByDay[day] ?? 0).rounded()),
                 activeKilocalories: activeByDay[day] ?? 0,
                 restingKilocalories: restingByDay[day] ?? 0,
-                distanceMeters: distanceByDay[day]
+                distanceMeters: distanceByDay[day],
+                exerciseMinutes: exerciseByDay[day],
+                flightsClimbed: flightsByDay[day].map { Int($0.rounded()) },
+                restingHeartRate: heartRateByDay[day],
+                heartRateVariabilityMilliseconds: hrvByDay[day],
+                sleepHours: sleepByDay[day]
             ))
         })
     }

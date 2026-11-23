@@ -44,9 +44,36 @@ struct DayDetailSheet: View {
                         if let miles = reading.miles {
                             row("Distance", value: "\(miles.formatted(.number.precision(.fractionLength(2)))) mi")
                         }
+                        if let flights = reading.flightsClimbed, flights > 0 {
+                            row("Flights climbed", value: "\(flights)")
+                        }
+                        if let minutes = reading.exerciseMinutes, minutes > 0 {
+                            row("Exercise", value: "\(Int(minutes.rounded())) min")
+                        }
                         row("Active energy", value: "\(Int(reading.activeKilocalories)) kcal")
                         row("Resting energy", value: "\(Int(reading.restingKilocalories)) kcal")
                         row("Total burned", value: "\(Int(reading.totalKilocalories)) kcal")
+                    }
+
+                    if reading.hasRestData {
+                        Section {
+                            if let hours = reading.sleepHours {
+                                row("Asleep", value: Self.hoursText(hours))
+                            }
+                            if let heartRate = reading.restingHeartRate {
+                                row("Resting heart rate", value: "\(Int(heartRate.rounded())) bpm")
+                            }
+                            if let hrv = reading.heartRateVariabilityMilliseconds {
+                                row("Heart rate variability", value: "\(Int(hrv.rounded())) ms")
+                            }
+                        } header: {
+                            Text("Rest")
+                        } footer: {
+                            // Said once, here: the night is filed under the
+                            // morning it ended on, which is how the question
+                            // is actually asked.
+                            Text("Sleep is the night that ended on this day. Overlapping records from more than one source count once.")
+                        }
                     }
                 } else {
                     Section {
@@ -130,6 +157,14 @@ struct DayDetailSheet: View {
                 }
             }
         }
+    }
+
+    /// 7.4 hours reads as "7h 24m". Decimal hours are a unit nobody sleeps in.
+    static func hoursText(_ hours: Double) -> String {
+        let total = Int((hours * 60).rounded())
+        let h = total / 60
+        let m = total % 60
+        return m == 0 ? "\(h)h" : "\(h)h \(m)m"
     }
 
     private func row(_ title: String, value: String) -> some View {

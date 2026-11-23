@@ -89,6 +89,19 @@ enum BodyComposition {
             : .weightReachedFirst(atPounds: atPounds)
     }
 
+    /// Body mass index: kilograms over metres squared.
+    ///
+    /// Here rather than on `WeightEntry` because it needs a height, which is
+    /// a fact about the person and not about the weigh-in. Returns `nil`
+    /// without one — a BMI from an assumed height is a number with no
+    /// meaning, and the UI would have no way to tell it from a real one.
+    static func bodyMassIndex(weightKilograms: Double, heightMeters: Double?) -> Double? {
+        guard let heightMeters, heightMeters > 0.5, heightMeters < 2.8, weightKilograms > 0 else {
+            return nil
+        }
+        return weightKilograms / (heightMeters * heightMeters)
+    }
+
     /// Body fat at a given weight, holding lean mass — the inverse of
     /// `weightForBodyFat`, used to say what the scale target implies.
     static func bodyFatPercent(

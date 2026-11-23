@@ -35,6 +35,9 @@ struct ProgressTimelineView: View {
             }
             .background(Color(.systemGroupedBackground))
             .navigationTitle("Progress")
+            // Waist measurements recorded elsewhere arrive here rather than
+            // having to be typed in twice.
+            .task { await progress.syncWaistFromHealth() }
             .sheet(isPresented: $isAddingMeasurement) {
                 MeasurementEntrySheet(progress: progress)
             }

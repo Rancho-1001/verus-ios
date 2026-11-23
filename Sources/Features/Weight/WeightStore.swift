@@ -57,6 +57,14 @@ final class WeightStore {
     private(set) var isSyncing = false
     private(set) var lastSyncAt: Date?
 
+    /// Height, read from Apple Health rather than asked for.
+    ///
+    /// Verus has no height field and does not want one: the number is
+    /// already on the phone, it changes almost never, and a form asking an
+    /// adult how tall they are is a form they fill in wrong. It is here for
+    /// one job — working out a BMI when the scale did not send one.
+    private(set) var heightMeters: Double?
+
     /// True while the weigh-ins on screen are the seeded sample set.
     ///
     /// This flag is load-bearing. The sample entries exist so the chart means
@@ -124,6 +132,8 @@ final class WeightStore {
             isSyncing = false
             lastSyncAt = .now
         }
+
+        heightMeters = try? await health.latestHeightMeters()
 
         guard let imported = try? await health.weightEntries(from: start, to: .now) else {
             return 0
@@ -202,6 +212,17 @@ final class WeightStore {
     /// Red, amber or green for the Home tile — read off the same projection
     /// the Weight screen prints in words, so the two cannot disagree.
     var standing: GoalStanding { GoalStanding.standing(for: projection) }
+
+    /// BMI for a weigh-in: the scale's own figure if it sent one, otherwise
+    /// worked out from weight and the height on file. `nil` when neither is
+    /// available, rather than a number standing in for a missing height.
+    func bodyMassIndex(for entry: WeightEntry) -> (value: Double, isMeasured: Bool)? {
+        if let measured = entry.bodyMassIndex { return (measured, true) }
+        guard let derived = BodyComposition.bodyMassIndex(
+            weightKilograms: entry.kilograms, heightMeters: heightMeters
+        ) else { return nil }
+        return (derived, false)
+    }
 
     /// How the weight goal and the body-fat goal relate at the current
     /// composition. `.noBodyFatRecorded` whenever either is missing.

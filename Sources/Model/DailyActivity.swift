@@ -23,21 +23,50 @@ struct DailyActivity: Identifiable, Hashable, Sendable {
     /// flat walk are not the same distance. Multiplying steps by an assumed
     /// stride would be inventing a number the phone already knows.
     let distanceMeters: Double?
+    /// Apple's own exercise minutes — the ring, not a count Verus invents.
+    let exerciseMinutes: Double?
+    let flightsClimbed: Int?
+    /// The day's average resting heart rate, in beats a minute. Health
+    /// records this once or twice a day rather than continuously, so a day
+    /// can have 20,000 steps and no figure here.
+    let restingHeartRate: Double?
+    /// Heart rate variability (SDNN) in milliseconds, averaged over the day.
+    let heartRateVariabilityMilliseconds: Double?
+    /// Hours asleep in the night that *ended* on this day — so "last night"
+    /// reads against this morning, which is how anyone actually thinks about
+    /// it. The bucketing rule lives in `SleepRollup`.
+    let sleepHours: Double?
 
-    /// Defaulted so the two dozen places that construct a day for a test do
-    /// not all have to say "no distance".
+    /// Everything past the first four is defaulted, so the places that
+    /// construct a day for a test do not have to say "and no heart rate".
     init(
         day: Date,
         steps: Int,
         activeKilocalories: Double,
         restingKilocalories: Double,
-        distanceMeters: Double? = nil
+        distanceMeters: Double? = nil,
+        exerciseMinutes: Double? = nil,
+        flightsClimbed: Int? = nil,
+        restingHeartRate: Double? = nil,
+        heartRateVariabilityMilliseconds: Double? = nil,
+        sleepHours: Double? = nil
     ) {
         self.day = day
         self.steps = steps
         self.activeKilocalories = activeKilocalories
         self.restingKilocalories = restingKilocalories
         self.distanceMeters = distanceMeters
+        self.exerciseMinutes = exerciseMinutes
+        self.flightsClimbed = flightsClimbed
+        self.restingHeartRate = restingHeartRate
+        self.heartRateVariabilityMilliseconds = heartRateVariabilityMilliseconds
+        self.sleepHours = sleepHours
+    }
+
+    /// True when anything beyond movement arrived for this day — what decides
+    /// whether a "Rest" section is worth drawing at all.
+    var hasRestData: Bool {
+        restingHeartRate != nil || heartRateVariabilityMilliseconds != nil || sleepHours != nil
     }
 
     var id: Date { day }
@@ -116,7 +145,12 @@ struct SampleActivitySource: ActivitySource {
                 // Sample data is allowed to derive distance from steps, since
                 // there is no phone to ask. Real data never does — see the
                 // note on `distanceMeters`.
-                distanceMeters: Double(steps) * Double.random(in: 0.70...0.80, using: &rng)
+                distanceMeters: Double(steps) * Double.random(in: 0.70...0.80, using: &rng),
+                exerciseMinutes: Double(Int.random(in: 12...85, using: &rng)),
+                flightsClimbed: Int.random(in: 0...18, using: &rng),
+                restingHeartRate: Double(Int.random(in: 52...64, using: &rng)),
+                heartRateVariabilityMilliseconds: Double(Int.random(in: 28...78, using: &rng)),
+                sleepHours: Double.random(in: 5.2...8.6, using: &rng)
             )
         }
         return result
