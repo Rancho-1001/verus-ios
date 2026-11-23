@@ -233,9 +233,26 @@ struct YearView: View {
 
     // MARK: - Weight
 
+    /// Change in weight over the part of the year that has weigh-ins.
+    ///
+    /// It said "across the year" and it was not. The trend line only exists
+    /// between the first weigh-in and the last, so a year first stood on in
+    /// March reported eight and a half months as twelve. It now names the
+    /// dates it actually measured between, and how many days carried a
+    /// reading — because the first point of a trend is a single morning,
+    /// unsmoothed (there is nothing yet to smooth it against), and an
+    /// endpoint difference resting on one morning is the weakest number on
+    /// this screen. `TrendEngine.rateKilogramsPerWeek` uses least squares
+    /// for exactly this reason; this figure cannot, because it has to agree
+    /// with the two weights printed under it.
     @ViewBuilder
     private var weightOverYear: some View {
         let points = weight.trend.filter { calendar.component(.year, from: $0.date) == year }
+        let weighInDays = Set(
+            weight.sessions
+                .filter { calendar.component(.year, from: $0.date) == year }
+                .map { calendar.startOfDay(for: $0.date) }
+        ).count
         if let first = points.first, let last = points.last, points.count > 1 {
             let change = last.pounds - first.pounds
             VStack(alignment: .leading, spacing: 7) {
@@ -244,9 +261,11 @@ struct YearView: View {
                     Text("\(change > 0 ? "+" : "")\(change, format: .number.precision(.fractionLength(1)))")
                         .font(.system(size: 26, weight: .semibold, design: .rounded))
                         .foregroundStyle(change < 0 ? .green : .primary)
-                    Text("lb across the year").font(.subheadline).foregroundStyle(.secondary)
+                    Text("lb since \(first.date, format: .dateTime.day().month())")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
-                Text("\(first.pounds, format: .number.precision(.fractionLength(1))) → \(last.pounds, format: .number.precision(.fractionLength(1))) lb, measured on the trend rather than on single weigh-ins.")
+                Text("\(first.pounds, format: .number.precision(.fractionLength(1))) on \(first.date, format: .dateTime.day().month()) → \(last.pounds, format: .number.precision(.fractionLength(1))) on \(last.date, format: .dateTime.day().month()), on the trend rather than on single weigh-ins. \(weighInDays) day\(weighInDays == 1 ? "" : "s") carried one, and the first point is a single morning with nothing yet to smooth it.")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
