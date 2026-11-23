@@ -184,12 +184,7 @@ struct YearView: View {
 
     private var months: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Every day").font(.headline)
-                Spacer()
-            }
-            GoalStandingLegend(stepGoal: activity.dailyStepGoal)
-                .padding(.bottom, 2)
+            Text("Every day").font(.headline)
             // One month per row rather than two. Two fitted the year on
             // fewer screens but left each day under 20 points wide, which
             // cannot hold a readable number — and the step count is the

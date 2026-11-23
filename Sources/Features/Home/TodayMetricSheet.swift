@@ -21,6 +21,22 @@ enum TodayMetric: String, CaseIterable, Identifiable, Sendable {
         case .weight: "scalemass"
         }
     }
+
+    /// A colour per metric, fixed.
+    ///
+    /// Not a verdict — unlike the calendar's red, amber and green, which say
+    /// where a day stands against the goal, these three say only *which
+    /// number you are looking at*. The progress rule underneath each tile is
+    /// what carries how far along today is. Keeping the two uses of colour
+    /// apart is the point: a tile that changed colour as the day went on
+    /// would read as a judgement being handed down three times a day.
+    var color: Color {
+        switch self {
+        case .steps: .red
+        case .active: .green
+        case .weight: .blue
+        }
+    }
 }
 
 /// One of today's numbers, in full.
@@ -70,11 +86,9 @@ struct TodayMetricSheet: View {
             headline(
                 value: today.map { HomeView.grouped($0.steps) } ?? "—",
                 unit: "steps today",
-                standing: activity.todayStepStanding,
                 share: GoalStanding.share(value: today?.steps, goal: goal),
                 detail: stepsHeadlineDetail
             )
-            GoalStandingLegend(stepGoal: goal)
         }
 
         Section("Today") {
@@ -136,7 +150,7 @@ struct TodayMetricSheet: View {
         let remaining = activity.dailyStepGoal - steps
         return remaining > 0
             ? "\(HomeView.grouped(remaining)) to go of \(HomeView.grouped(activity.dailyStepGoal))"
-            : "\(HomeView.grouped(-remaining)) past the \(HomeView.grouped(activity.dailyStepGoal)) goal"
+            : "goal met"
     }
 
     // MARK: - Active energy
@@ -150,7 +164,6 @@ struct TodayMetricSheet: View {
             headline(
                 value: today.map { "\(Int($0.activeKilocalories))" } ?? "—",
                 unit: "kcal burned today",
-                standing: activity.todayActiveStanding,
                 share: GoalStanding.share(value: today?.activeKilocalories, goal: goal),
                 detail: activeHeadlineDetail
             )
@@ -237,7 +250,7 @@ struct TodayMetricSheet: View {
         let remaining = Double(activity.dailyActiveEnergyGoal) - active
         return remaining > 0
             ? "\(Int(remaining.rounded())) kcal to go of \(activity.dailyActiveEnergyGoal)"
-            : "\(Int((-remaining).rounded())) kcal past the \(activity.dailyActiveEnergyGoal) goal"
+            : "goal met"
     }
 
     private var todaysWorkouts: [Workout] {
@@ -265,7 +278,6 @@ struct TodayMetricSheet: View {
             headline(
                 value: weight.trendPounds.map { $0.formatted(.number.precision(.fractionLength(1))) } ?? "—",
                 unit: "lb trend",
-                standing: weight.standing,
                 share: nil,
                 detail: weightHeadlineDetail
             )
@@ -354,10 +366,17 @@ struct TodayMetricSheet: View {
         }
     }
 
+    /// Why this is not the number on the scale.
+    ///
+    /// "Smoothed from 72 weigh-ins" was a true sentence that answered the
+    /// wrong question. What someone wants to know, looking at a figure four
+    /// pounds off this morning's reading, is *what it is* — and the answer
+    /// is a weighted average that leans on the last fortnight or so, which
+    /// is the whole point of the product and so is worth saying out loud.
     private var weightHeadlineDetail: String {
         guard weight.trendPounds != nil else { return "no weigh-ins yet" }
         let count = weight.entries.count
-        return "smoothed from \(count) weigh-in\(count == 1 ? "" : "s")"
+        return "\(count) weigh-in\(count == 1 ? "" : "s"), weighted toward the last 19 days"
     }
 
     /// Trend-to-trend across the month on screen, the same figure the Home
@@ -431,10 +450,11 @@ struct TodayMetricSheet: View {
 
     // MARK: - Pieces
 
+    /// The sheet opens in the colour of the tile that opened it, so there is
+    /// no moment of wondering which number this is.
     private func headline(
         value: String,
         unit: String,
-        standing: GoalStanding,
         share: Double?,
         detail: String
     ) -> some View {
@@ -442,7 +462,7 @@ struct TodayMetricSheet: View {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(value)
                     .font(.system(size: 42, weight: .semibold, design: .rounded))
-                    .foregroundStyle(standing.valueColor)
+                    .foregroundStyle(metric.color)
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
@@ -455,15 +475,15 @@ struct TodayMetricSheet: View {
                     ZStack(alignment: .leading) {
                         Capsule().fill(Color.primary.opacity(0.07))
                         Capsule()
-                            .fill(standing.color.opacity(0.8))
+                            .fill(metric.color.opacity(0.8))
                             .frame(width: max(proxy.size.width * share, share > 0 ? 4 : 0))
                     }
                 }
                 .frame(height: 6)
             }
-            Label(detail, systemImage: standing.symbol)
+            Text(detail)
                 .font(.footnote)
-                .foregroundStyle(standing == .unknown ? Color.secondary : standing.color)
+                .foregroundStyle(.secondary)
         }
         .padding(.vertical, 6)
         .accessibilityElement(children: .combine)

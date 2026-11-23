@@ -151,14 +151,13 @@ struct HomeView: View {
 
     /// One of today's three numbers.
     ///
-    /// Two things changed here after the app had been used for a few days.
-    /// They were not tappable — three cards that look exactly like the ones
-    /// elsewhere in the app that do open, which is its own kind of lie — and
-    /// they were colourless, so the number told you where you stood only
-    /// after you had remembered the goal and done the arithmetic. Now the
-    /// value carries its band's colour and the whole card is a button.
+    /// Each metric keeps its own colour — steps red, active green, weight
+    /// blue — so the three cards are told apart at a glance rather than
+    /// read. That is a different job from the calendar's red, amber and
+    /// green, which are a verdict on a day; these are an identity. The rule
+    /// under each number is what says how far along today is.
     private func tile(_ metric: TodayMetric) -> some View {
-        let standing = standing(for: metric)
+        let colour = metric.color
         return VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 3) {
                 Label(metric.title, systemImage: metric.symbol)
@@ -173,7 +172,7 @@ struct HomeView: View {
             }
             Text(value(for: metric))
                 .font(.system(size: 22, weight: .semibold, design: .rounded))
-                .foregroundStyle(standing.valueColor)
+                .foregroundStyle(colour)
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
@@ -182,7 +181,7 @@ struct HomeView: View {
                 .foregroundStyle(.tertiary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
-            progressBar(standing: standing, share: share(for: metric))
+            progressBar(colour: colour, share: share(for: metric))
                 .padding(.top, 3)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -192,27 +191,28 @@ struct HomeView: View {
             RoundedRectangle(cornerRadius: 14)
                 .fill(.background)
                 .overlay {
-                    RoundedRectangle(cornerRadius: 14).fill(standing.tileTint)
+                    RoundedRectangle(cornerRadius: 14).fill(colour.opacity(0.09))
                 }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
-            "\(metric.title), \(value(for: metric)), \(caption(for: metric)), \(standing.label)"
+            "\(metric.title), \(value(for: metric)), \(caption(for: metric))"
         )
     }
 
-    /// A 3-point rule under each tile. `nil` leaves the track invisible but
-    /// still laid out, so the three cards keep the same height — weight has
-    /// no "share of today's goal" to draw, and inventing one would be the
-    /// kind of flattery this app is built to avoid.
+    /// A 3-point rule under each tile, in the metric's own colour. `nil`
+    /// leaves the track invisible but still laid out, so the three cards
+    /// keep the same height — weight has no "share of today's goal" to draw,
+    /// and inventing one would be the kind of flattery this app is built to
+    /// avoid.
     @ViewBuilder
-    private func progressBar(standing: GoalStanding, share: Double?) -> some View {
+    private func progressBar(colour: Color, share: Double?) -> some View {
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
                 Capsule().fill(share == nil ? .clear : Color.primary.opacity(0.07))
                 if let share {
                     Capsule()
-                        .fill(standing.color.opacity(0.75))
+                        .fill(colour.opacity(0.8))
                         .frame(width: max(proxy.size.width * share, share > 0 ? 3 : 0))
                 }
             }
@@ -221,14 +221,6 @@ struct HomeView: View {
     }
 
     // MARK: - What each tile says
-
-    private func standing(for metric: TodayMetric) -> GoalStanding {
-        switch metric {
-        case .steps: activity.todayStepStanding
-        case .active: activity.todayActiveStanding
-        case .weight: weight.standing
-        }
-    }
 
     private func value(for metric: TodayMetric) -> String {
         switch metric {
@@ -265,12 +257,16 @@ struct HomeView: View {
 
     /// The headline weight is the trend; this line carries the raw reading, so
     /// both are visible and only one is the claim.
+    /// The headline weight is the trend, which is deliberately not the last
+    /// reading — so the last reading is named here, with its date. Without
+    /// it the tile looks like a scale that disagrees with the scale.
     private var trendCaption: String {
         guard let latest = weight.latestEntry else { return "no weigh-ins yet" }
+        let pounds = latest.pounds.formatted(.number.precision(.fractionLength(1)))
         guard calendar.isDateInToday(latest.date) else {
-            return "trend · last \(latest.date.formatted(.dateTime.day().month()))"
+            return "trend · \(pounds) on \(latest.date.formatted(.dateTime.day().month()))"
         }
-        return "trend · today \(latest.pounds.formatted(.number.precision(.fractionLength(1))))"
+        return "trend · \(pounds) today"
     }
 
     /// Distance first when the phone reported one, then the gap to the goal.
@@ -333,11 +329,6 @@ struct HomeView: View {
                 weeklyAverages: weeklyAverages,
                 onSelect: { selectedDay = $0 }
             )
-
-            // The key sits under the grid it explains. Without it the three
-            // colours are a guess about where the lines fall, and "halfway"
-            // depends on a goal the user set themselves.
-            GoalStandingLegend(stepGoal: activity.dailyStepGoal)
         }
         .padding(16)
         .background(.background, in: .rect(cornerRadius: 18))

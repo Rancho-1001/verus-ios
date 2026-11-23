@@ -62,34 +62,3 @@ extension GoalStanding {
         }
     }
 }
-
-/// What the three colours mean, in the app's own numbers.
-///
-/// A key is worth the two lines it costs: the bands are only obvious once
-/// you know where they sit, and "halfway" depends on a goal the user chose.
-struct GoalStandingLegend: View {
-    let stepGoal: Int
-
-    var body: some View {
-        HStack(spacing: 12) {
-            swatch(.short, "under \(MonthCalendarView.abbreviated(stepGoal / 2))")
-            swatch(.closing, MonthCalendarView.abbreviated(stepGoal / 2) + "+")
-            swatch(.met, MonthCalendarView.abbreviated(stepGoal) + "+")
-            Spacer(minLength: 0)
-        }
-    }
-
-    private func swatch(_ standing: GoalStanding, _ text: String) -> some View {
-        HStack(spacing: 4) {
-            RoundedRectangle(cornerRadius: 3)
-                .fill(standing.color.opacity(0.85))
-                .frame(width: 9, height: 9)
-            Text(text)
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(standing.label): \(text)")
-    }
-}

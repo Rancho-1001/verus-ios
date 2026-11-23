@@ -75,6 +75,11 @@ final class WeightStore {
     /// real data arrives is what makes that impossible rather than unlikely.
     private(set) var isShowingSampleEntries = false
 
+    /// How many seeded weigh-ins were cleared out of the stored file on
+    /// launch. Shown once on the weigh-in list rather than silently: the
+    /// trend will have moved, and the user is entitled to know why.
+    private(set) var purgedSampleCount = 0
+
     init(
         fileURL: URL? = WeightStore.defaultFileURL,
         health: HealthKitService? = HealthKitService.isAvailable ? HealthKitService() : nil,
@@ -290,9 +295,22 @@ final class WeightStore {
         guard let fileURL, let data = try? Data(contentsOf: fileURL) else { return }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        entries = (try? decoder.decode([StoredEntry].self, from: data))?
+        let stored = (try? decoder.decode([StoredEntry].self, from: data))?
             .map(\.entry)
             .sorted { $0.date < $1.date } ?? []
+
+        // A file written before the sample-data fix can hold invented
+        // mornings. They are identifiable — see `SampleWeighIn` — and they
+        // are not a cosmetic problem: thirty-eight of them five pounds below
+        // the real weight drag the trend by four, which is the whole number
+        // this app exists to get right. Cleared once, here, and written back
+        // so it does not have to happen again.
+        let cleaned = SampleWeighIn.purge(stored, calendar: calendar)
+        entries = cleaned
+        if cleaned.count < stored.count {
+            purgedSampleCount = stored.count - cleaned.count
+            save()
+        }
     }
 
     private func save() {

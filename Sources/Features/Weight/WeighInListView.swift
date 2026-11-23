@@ -35,6 +35,17 @@ struct WeighInListView: View {
                 }
             }
 
+            if store.purgedSampleCount > 0 {
+                Section {
+                    Label(
+                        "\(store.purgedSampleCount) sample weigh-ins were cleared out of this list. They were seeded by an early version and saved by mistake, and they were pulling the trend down. Your own weigh-ins are untouched.",
+                        systemImage: "sparkles"
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                }
+            }
+
             Section {
                 Button {
                     Task { await store.syncFromHealth() }
